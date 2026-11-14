@@ -19,7 +19,7 @@ class FinancialAccounts extends Component
 
     public string $institution = '';
 
-    public string $initialBalance = '0,00';
+    public string $initialBalance = 'R$ 0,00';
 
     public function openCreate(): void
     {
@@ -28,7 +28,7 @@ class FinancialAccounts extends Component
         $this->name = '';
         $this->type = 'corrente';
         $this->institution = '';
-        $this->initialBalance = '0,00';
+        $this->initialBalance = 'R$ 0,00';
         $this->formOpen = true;
     }
 
@@ -41,7 +41,7 @@ class FinancialAccounts extends Component
         $this->name = $account->name;
         $this->type = $account->type;
         $this->institution = $account->institution ?? '';
-        $this->initialBalance = number_format((float) $account->initial_balance, 2, ',', '.');
+        $this->initialBalance = 'R$ '.number_format((float) $account->initial_balance, 2, ',', '.');
         $this->formOpen = true;
     }
 
@@ -57,7 +57,7 @@ class FinancialAccounts extends Component
             'name' => ['required', 'string', 'min:2', 'max:100'],
             'type' => ['required', Rule::in(['corrente', 'poupanca', 'carteira', 'outras'])],
             'institution' => ['nullable', 'string', 'max:100'],
-            'initialBalance' => ['required', 'regex:/^(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?$/D'],
+            'initialBalance' => ['required', 'regex:/^(?:R\$\s*)?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?$/D'],
         ], [
             'name.required' => 'Informe o nome da conta.',
             'name.min' => 'O nome deve ter pelo menos 2 caracteres.',
@@ -66,7 +66,8 @@ class FinancialAccounts extends Component
             'initialBalance.regex' => 'Informe um valor válido, como 0,00 ou 1.250,50.',
         ]);
 
-        $normalized = str_replace(',', '.', str_replace('.', '', $data['initialBalance']));
+        $amount = preg_replace('/^R\$\s*/u', '', trim($data['initialBalance']));
+        $normalized = str_replace(',', '.', str_replace('.', '', $amount));
 
         if ((float) $normalized > 999999999.99) {
             $this->addError('initialBalance', 'O saldo informado ultrapassa o limite permitido.');

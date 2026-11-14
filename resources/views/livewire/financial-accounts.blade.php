@@ -63,9 +63,11 @@
                     @error('institution') <p class="mt-2 text-xs text-red-600" role="alert">{{ $message }}</p> @enderror
                 </div>
                 <div>
-                    <label for="account-balance" class="mb-2 block text-sm font-medium">Saldo inicial (R$)</label>
-                    <input id="account-balance" type="text" wire:model="initialBalance" inputmode="decimal" placeholder="0,00" required
-                        class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-sky-700 focus:ring-4 focus:ring-sky-100">
+                    <label for="account-balance" class="mb-2 block text-sm font-medium">Saldo inicial</label>
+                    <input id="account-balance" type="text" wire:model="initialBalance" data-money-mask inputmode="numeric" autocomplete="off" placeholder="R$ 0,00" required
+                        aria-describedby="account-balance-help"
+                        class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium tabular-nums outline-none focus:border-sky-700 focus:ring-4 focus:ring-sky-100">
+                    <p id="account-balance-help" class="mt-2 text-xs text-slate-500">Digite apenas os números. Ex.: 123456 aparece como R$ 1.234,56.</p>
                     @error('initialBalance') <p class="mt-2 text-xs text-red-600" role="alert">{{ $message }}</p> @enderror
                 </div>
                 <div class="md:col-span-2 flex flex-wrap gap-3">
@@ -84,40 +86,57 @@
             <span class="text-sm text-slate-500">{{ $accounts->count() }} no total</span>
         </div>
 
-        <div class="mt-4 grid gap-4 md:grid-cols-2">
-            @forelse ($accounts as $account)
-                <article wire:key="account-{{ $account->id }}" class="rounded-2xl border border-slate-200 bg-white p-6 {{ $account->active ? '' : 'opacity-70' }}">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <h3 class="text-lg font-semibold">{{ $account->name }}</h3>
-                            <p class="mt-1 text-sm text-slate-500">
-                                {{ ['corrente' => 'Conta corrente', 'poupanca' => 'Poupança', 'carteira' => 'Carteira', 'outras' => 'Outra conta'][$account->type] ?? 'Conta' }}
-                                @if ($account->institution) · {{ $account->institution }} @endif
-                            </p>
-                        </div>
-                        <span class="rounded-full px-3 py-1 text-xs font-semibold {{ $account->active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600' }}">
-                            {{ $account->active ? 'Ativa' : 'Desativada' }}
-                        </span>
-                    </div>
-                    <div class="mt-6">
-                        <p class="text-xs font-medium text-slate-500">Saldo inicial</p>
-                        <p class="mt-1 text-2xl font-semibold tracking-tight tabular-nums">R$ {{ number_format((float) $account->initial_balance, 2, ',', '.') }}</p>
-                    </div>
-                    <div class="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-                        <button type="button" wire:click="edit({{ $account->id }})" class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">Editar</button>
-                        <button type="button" wire:click="toggleActive({{ $account->id }})" wire:confirm="{{ $account->active ? 'Desativar esta conta? Os dados serão preservados.' : 'Reativar esta conta?' }}"
-                            class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">
-                            {{ $account->active ? 'Desativar' : 'Reativar' }}
-                        </button>
-                    </div>
-                </article>
-            @empty
-                <div class="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center md:col-span-2">
-                    <h3 class="text-lg font-semibold">Nenhuma conta cadastrada</h3>
-                    <p class="mt-2 text-sm text-slate-500">Comece cadastrando uma conta bancária ou sua carteira.</p>
-                    <button type="button" wire:click="openCreate" class="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800">Cadastrar primeira conta</button>
-                </div>
-            @endforelse
+
+        <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div class="overflow-x-auto">
+                <table class="min-w-[790px] w-full border-collapse text-left text-sm">
+                    <thead class="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <tr>
+                            <th scope="col" class="px-5 py-4">Conta</th>
+                            <th scope="col" class="px-5 py-4">Tipo</th>
+                            <th scope="col" class="px-5 py-4">Instituição</th>
+                            <th scope="col" class="px-5 py-4 text-right">Saldo inicial</th>
+                            <th scope="col" class="px-5 py-4">Situação</th>
+                            <th scope="col" class="px-5 py-4 text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse ($accounts as $account)
+                            <tr wire:key="account-row-{{ $account->id }}" class="transition hover:bg-sky-50/50 {{ $account->active ? '' : 'bg-slate-50/70 text-slate-500' }}">
+                                <th scope="row" class="px-5 py-4 font-semibold text-slate-900">{{ $account->name }}</th>
+                                <td class="px-5 py-4 text-slate-600">
+                                    {{ ['corrente' => 'Conta corrente', 'poupanca' => 'Poupança', 'carteira' => 'Carteira', 'outras' => 'Outra conta'][$account->type] ?? 'Conta' }}
+                                </td>
+                                <td class="px-5 py-4 text-slate-600">{{ $account->institution ?: '—' }}</td>
+                                <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-slate-900">R$ {{ number_format((float) $account->initial_balance, 2, ',', '.') }}</td>
+                                <td class="px-5 py-4">
+                                    <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {{ $account->active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200 text-slate-600' }}">
+                                        {{ $account->active ? 'Ativa' : 'Desativada' }}
+                                    </span>
+                                </td>
+                                <td class="whitespace-nowrap px-5 py-4 text-right">
+                                    <div class="flex justify-end gap-2">
+                                        <button type="button" wire:click="edit({{ $account->id }})" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Editar</button>
+                                        <button type="button" wire:click="toggleActive({{ $account->id }})" wire:confirm="{{ $account->active ? 'Desativar esta conta? Os dados serão preservados.' : 'Reativar esta conta?' }}"
+                                            class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">
+                                            {{ $account->active ? 'Desativar' : 'Reativar' }}
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="6" class="px-6 py-12 text-center">
+                                    <p class="text-lg font-semibold text-slate-900">Nenhuma conta cadastrada</p>
+                                    <p class="mt-2 text-sm text-slate-500">Comece cadastrando uma conta bancária ou sua carteira.</p>
+                                    <button type="button" wire:click="openCreate" class="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800">Cadastrar primeira conta</button>
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
         </div>
+        <p class="mt-2 text-xs text-slate-500 sm:hidden">Deslize a tabela para o lado para visualizar todas as colunas.</p>
     </section>
 </div>

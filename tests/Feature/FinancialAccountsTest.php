@@ -90,6 +90,44 @@ class FinancialAccountsTest extends TestCase
             ->assertSee('0 no total');
     }
 
+    public function test_user_can_create_account_with_masked_currency_value(): void
+    {
+        $user = User::factory()->create();
+
+        Livewire::actingAs($user)->test(FinancialAccounts::class)
+            ->call('openCreate')
+            ->assertSet('initialBalance', 'R$ 0,00')
+            ->set('name', 'Neon')
+            ->set('type', 'corrente')
+            ->set('initialBalance', 'R$ 1.234,56')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('financial_accounts', [
+            'user_id' => $user->id,
+            'name' => 'Neon',
+            'initial_balance' => '1234.56',
+        ]);
+    }
+
+    public function test_accounts_list_is_rendered_as_a_table(): void
+    {
+        $user = User::factory()->create();
+
+        FinancialAccount::create([
+            'user_id' => $user->id,
+            'name' => 'Conta principal',
+            'type' => 'corrente',
+            'initial_balance' => '25.00',
+        ]);
+
+        Livewire::actingAs($user)->test(FinancialAccounts::class)
+            ->assertSee('Contas cadastradas')
+            ->assertSee('Saldo inicial')
+            ->assertSee('Conta principal')
+            ->assertSeeHtml('<table');
+    }
+
     public function test_negative_initial_balance_is_rejected(): void
     {
         Livewire::actingAs(User::factory()->create())->test(FinancialAccounts::class)
