@@ -70,16 +70,22 @@ class CardInstallmentAdvanceTest extends TestCase
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-11')
-            ->assertSee('Nenhuma parcela de cartão vence neste mês')
-            ->assertSee('R$ 260,96')
-            ->call('jumpToCardMonth', '2026-12')
-            ->assertSet('selectedMonth', '2026-12')
+            ->assertSee('Pagamentos nos cartões')
             ->assertSee('Hiper')
             ->assertSee('Passaí')
             ->assertSee('R$ 125,00')
             ->assertSee('R$ 135,96')
             ->assertSee('R$ 260,96')
-            ->assertDontSee('R$ 1.250,00')
+            ->assertDontSee('Bomba hidráulica')
+            ->call('openCardBreakdown', $hiper->id)
+            ->assertSee('Bomba hidráulica')
+            ->assertSee('15/12/2026')
+            ->call('closeCardBreakdown')
+            ->call('jumpToCardMonth', '2026-12')
+            ->assertSet('selectedMonth', '2026-12')
+            ->call('openCardBreakdown', $passai->id)
+            ->assertSee('Pneus do carro')
+            ->assertSee('R$ 135,96')
             ->assertDontSee('R$ 1.359,60');
 
         $this->assertSame(300000, (new FinancialBalance())->currentCents($account));
@@ -97,32 +103,35 @@ class CardInstallmentAdvanceTest extends TestCase
         $this->purchase($user, $passai, 'Pneus do Carro', 'R$ 1.359,60', '2026-11-14', 10);
         $this->purchase($user, $passai, 'Alinhamento e Balanceamento', 'R$ 309,99', '2026-11-14', 3);
 
-        // Novembro: foram feitas três compras; a primeira fatura é dezembro.
+        // Novembro mostra apenas a soma por cartão; os itens ficam no modal.
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-11')
-            ->assertSee('Compras no cartão neste mês')
-            ->assertSee('3 compra(s)')
-            ->assertSee('Bomba Hidráulica')
+            ->assertSee('Pagamentos nos cartões')
+            ->assertSee('R$ 239,29')
+            ->assertSee('R$ 125,00')
+            ->assertViewHas('cardOverviewCents', 36429)
+            ->assertViewHas('totalOverviewCents', 36429)
+            ->assertDontSee('Bomba Hidráulica')
+            ->assertDontSee('Pneus do Carro')
+            ->assertDontSee('Alinhamento e Balanceamento')
+            ->assertDontSee('Faturas de cartão do mês')
+            ->call('openCardBreakdown', $passai->id)
             ->assertSee('Pneus do Carro')
             ->assertSee('Alinhamento e Balanceamento')
+            ->assertSee('13/12/2026')
             ->assertSee('1/10')
             ->assertSee('1/3')
-            ->assertSee('15/12/2026')
-            ->assertSee('13/12/2026')
-            ->assertSee('Cartões do mês')
-            ->assertSee('Total do mês')
-            ->assertViewHas('cardOverviewCents', 36429)
-            ->assertViewHas('totalOverviewCents', 36429);
+            ->call('closeCardBreakdown')
+            ->assertDontSee('Pneus do Carro');
 
-        // Dezembro: as três parcelas são efetivamente compromissos do mês.
+        // Em dezembro a soma é a mesma, agora com fatura do mês.
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-12')
             ->assertViewHas('cardOverviewCents', 36429)
             ->assertViewHas('totalOverviewCents', 36429)
+            ->call('openCardBreakdown', $hiper->id)
             ->assertSee('Bomba Hidráulica')
-            ->assertSee('Pneus do Carro')
-            ->assertSee('Alinhamento e Balanceamento')
-            ->assertDontSee('Compras no cartão neste mês');
+            ->assertSee('15/12/2026');
 
         $this->assertDatabaseCount('credit_card_invoice_payments', 0);
         $this->assertSame(300000, (new FinancialBalance())->currentCents($bank));
@@ -137,15 +146,19 @@ class CardInstallmentAdvanceTest extends TestCase
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-12')
-            ->assertSee('Compra após fechamento de dezembro')
-            ->assertSee('15/01/2027')
             ->assertViewHas('cardOverviewCents', 9000)
-            ->assertViewHas('totalOverviewCents', 9000);
+            ->assertViewHas('totalOverviewCents', 9000)
+            ->assertDontSee('Compra após fechamento de dezembro')
+            ->call('openCardBreakdown', $card->id)
+            ->assertSee('Compra após fechamento de dezembro')
+            ->assertSee('15/01/2027');
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2027-01')
             ->assertViewHas('cardOverviewCents', 9000)
-            ->assertDontSee('Compras no cartão neste mês');
+            ->assertDontSee('Compra após fechamento de dezembro')
+            ->call('openCardBreakdown', $card->id)
+            ->assertSee('Compra após fechamento de dezembro');
     }
 
     public function test_purchase_before_and_after_closing_stays_in_correct_month(): void
@@ -158,6 +171,8 @@ class CardInstallmentAdvanceTest extends TestCase
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-11')
+            ->assertViewHas('cardOverviewCents', 11000)
+            ->call('openCardBreakdown', $card->id)
             ->assertSee('Antes do fechamento')
             ->assertSee('Depois do fechamento')
             ->assertSee('15/12/2026')
@@ -165,6 +180,8 @@ class CardInstallmentAdvanceTest extends TestCase
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-12')
+            ->assertDontSee('Depois do fechamento')
+            ->call('openCardBreakdown', $card->id)
             ->assertSee('Depois do fechamento')
             ->assertDontSee('Antes do fechamento')
             ->assertSee('R$ 60,00');
@@ -226,7 +243,9 @@ class CardInstallmentAdvanceTest extends TestCase
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-12')
             ->assertSee('R$ 300,00')
-            ->assertSee('Antecipada para este mês')
+            ->call('openCardBreakdown', $card->id)
+            ->assertSee('Antecipada')
+            ->call('closeCardBreakdown')
             ->call('openCardPayment', $dec->id)
             ->assertSet('cardPaymentOpen', true)
             ->assertSet('cardPayAmount', 'R$ 300,00')
@@ -244,7 +263,7 @@ class CardInstallmentAdvanceTest extends TestCase
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2027-01')
-            ->assertDontSee('Parcelado janeiro')
+            ->assertViewHas('cardOverviewCents', 0)
             ->set('selectedMonth', '2027-02')
             ->assertSee('R$ 100,00');
     }
@@ -341,6 +360,8 @@ class CardInstallmentAdvanceTest extends TestCase
             ->assertViewHas('cardInvoiceTotalCents', 5000)
             ->assertViewHas('cardOverviewCents', 11000)
             ->assertViewHas('totalOverviewCents', 11000)
+            ->assertDontSee('Compra antes do fechamento')
+            ->call('openCardBreakdown', $card->id)
             ->assertSee('Compra antes do fechamento')
             ->assertSee('Compra após fechamento');
 

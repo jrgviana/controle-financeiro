@@ -2,21 +2,15 @@
     <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
             <p class="text-sm font-semibold text-sky-700">Planejamento e vencimentos</p>
-            <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Contas fixas</h1>
+            <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Contas mensais</h1>
             <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
-                Contas, compras e faturas organizadas por mês.
+                Acompanhe suas contas e pagamentos previstos.
             </p>
         </div>
-        <div class="flex flex-wrap gap-2">
-            <button type="button" wire:click="openOneOff"
-                class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold hover:bg-slate-100">
-                + Conta avulsa
-            </button>
-            <button type="button" wire:click="openFixedForm"
-                class="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800">
-                + Nova conta fixa
-            </button>
-        </div>
+        <button type="button" wire:click="openFixedForm"
+            class="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800">
+            + Cadastrar conta mensal
+        </button>
     </div>
 
     @if (session()->has('success'))
@@ -28,7 +22,7 @@
     <div class="flex flex-wrap items-end justify-between gap-3">
         <div>
             <h2 class="text-lg font-semibold">Planejamento mensal</h2>
-            <p class="mt-1 text-sm text-slate-500">Resumo de lançamentos e vencimentos do mês.</p>
+            <p class="mt-1 text-sm text-slate-500">Valores previstos para o mês selecionado.</p>
         </div>
         <div>
             <label for="fixed-month" class="mb-1 block text-xs font-semibold text-slate-500">Competência</label>
@@ -43,7 +37,7 @@
             <p class="mt-2 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($plannedCents) }}</p>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p class="text-sm font-medium text-slate-600">Cartões do mês</p>
+            <p class="text-sm font-medium text-slate-600">Pagamentos nos cartões</p>
             <p class="mt-2 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($cardOverviewCents) }}</p>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -52,151 +46,42 @@
         </div>
     </div>
 
-    @if ($cardPurchasesMadeCount > 0)
-        <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-                <h2 class="text-base font-semibold">Compras no cartão neste mês</h2>
-                <span class="text-xs text-slate-500">{{ $cardPurchasesMadeCount }} compra(s)</span>
-            </div>
-            <div class="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">
-                @foreach ($cardPurchasesMadeInMonth as $entry)
-                    @php
-                        $purchase = $entry['purchase'];
-                        $first = $entry['first_installment'];
-                        $dueOn = $entry['first_due_on'];
-                    @endphp
-                    <div wire:key="purchase-month-{{ $purchase->id }}" class="flex min-w-0 flex-wrap items-center justify-between gap-x-5 gap-y-2 px-3 py-3 sm:px-4">
+    <section>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-lg font-semibold">Pagamentos nos cartões</h2>
+        </div>
+        <div class="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div class="divide-y divide-slate-100">
+                @forelse ($cardPaymentSummaries as $summary)
+                    <div wire:key="monthly-card-{{ $summary['card']->id }}"
+                         class="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-4">
                         <div class="min-w-0 flex-1">
-                            <p class="break-words text-sm font-semibold text-slate-900">{{ $purchase->description }}</p>
+                            <p class="break-words text-sm font-semibold text-slate-900">{{ $summary['card']->name }}</p>
                             <p class="mt-1 text-xs text-slate-500">
-                                {{ $purchase->card?->name ?? 'Cartão' }}
-                                · {{ $purchase->purchased_on->format('d/m/Y') }}
-                                · {{ $first ? '1/'.$purchase->installments_count : 'Sem parcelas' }}
-                                @if ($dueOn)
-                                    · Vence {{ $dueOn->format('d/m/Y') }}
-                                @endif
+                                {{ $summary['groups']->count() }} vencimento(s)
                             </p>
                         </div>
                         <div class="flex shrink-0 items-center gap-3">
-                            <strong class="text-sm tabular-nums text-slate-900">R$ {{ \App\Support\FinancialBalance::formatted($entry['first_installment_cents']) }}</strong>
-                            @if ($first?->invoice)
-                                <a href="{{ route('cartoes.index', ['cartao' => $purchase->credit_card_id, 'fatura' => $first->credit_card_invoice_id]) }}"
-                                   class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold hover:bg-slate-100">Fatura</a>
-                            @endif
+                            <strong class="text-base tabular-nums text-slate-900">
+                                R$ {{ \App\Support\FinancialBalance::formatted($summary['amount_cents']) }}
+                            </strong>
+                            <button type="button" wire:click="openCardBreakdown({{ $summary['card']->id }})"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">
+                                Ver cobranças
+                            </button>
                         </div>
                     </div>
-                @endforeach
+                @empty
+                    <p class="px-5 py-8 text-center text-sm text-slate-500">Nenhum pagamento de cartão previsto neste mês.</p>
+                @endforelse
             </div>
-        </section>
-    @endif
-
-    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-                <h2 class="text-lg font-semibold">Faturas de cartão do mês</h2>
-                <p class="mt-1 text-xs leading-5 text-slate-500">
-                    Parcelas para pagamento neste mês.
-                </p>
-            </div>
-            @if ($cardAdvancedCents > 0)
-                <p class="text-xs font-semibold text-sky-700">
-                    Inclui R$ {{ \App\Support\FinancialBalance::formatted($cardAdvancedCents) }} em antecipações programadas
-                </p>
-            @endif
         </div>
-
-        <div class="mt-5 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
-            @forelse ($cardInvoices as $entry)
-                @php
-                    $invoice = $entry['invoice'];
-                    $card = $entry['card'];
-                    $row = $entry['row'];
-                @endphp
-                <div wire:key="fixed-card-invoice-{{ $invoice->id }}" class="px-4 py-4">
-                    <div class="flex flex-wrap items-center justify-between gap-3">
-                        <div class="min-w-0">
-                            <p class="font-semibold text-slate-900">{{ $card->name }}</p>
-                            <p class="mt-1 text-xs text-slate-500">
-                                Vence {{ $invoice->due_on->format('d/m/Y') }}
-                                · {{ $invoice->installments->count() }} parcela(s)
-                                @if ($entry['planned_advance_cents'] > 0)
-                                    · <span class="font-semibold text-sky-700">Inclui antecipações</span>
-                                @endif
-                            </p>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-3 sm:gap-4">
-                            <div class="text-right">
-                                <p class="text-xs text-slate-500">
-                                    {{ $row['remaining_cents'] === 0 ? 'Quitada' : ($row['paid_cents'] > 0 ? 'Saldo após pagamento parcial' : 'A pagar') }}
-                                </p>
-                                <p class="mt-1 font-semibold tabular-nums">
-                                    R$ {{ \App\Support\FinancialBalance::formatted($row['remaining_cents']) }}
-                                </p>
-                            </div>
-                            @if ($row['remaining_cents'] > 0)
-                                <button type="button" wire:click="openCardPayment({{ $invoice->id }})"
-                                        class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">
-                                    Pagar fatura
-                                </button>
-                            @else
-                                <span class="text-xs font-semibold text-emerald-700">Paga</span>
-                            @endif
-                            <a href="{{ route('cartoes.index', ['cartao' => $card->id, 'fatura' => $invoice->id]) }}"
-                               class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">
-                                Detalhes
-                            </a>
-                        </div>
-                    </div>
-                    <div class="mt-3 rounded-lg bg-slate-50 px-3 py-1.5">
-                        <div class="divide-y divide-slate-200">
-                            @foreach ($invoice->installments as $installment)
-                                <div class="flex flex-wrap items-start justify-between gap-2 py-2 text-xs" wire:key="monthly-installment-{{ $installment->id }}">
-                                    <div>
-                                        <p class="font-medium text-slate-800">{{ $installment->purchase?->description ?? 'Compra' }}</p>
-                                        <p class="mt-0.5 text-slate-500">
-                                            Parcela {{ $installment->installment_number }}/{{ $installment->purchase?->installments_count ?? '?' }}
-                                            @if ($installment->scheduledPlan)
-                                                · <span class="font-semibold text-sky-700">Antecipada para este mês</span>
-                                            @elseif ($installment->advance)
-                                                · <span class="font-semibold text-emerald-700">Antecipação já paga</span>
-                                            @endif
-                                        </p>
-                                    </div>
-                                    <strong class="tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted(\App\Support\FinancialBalance::cents($installment->amount)) }}</strong>
-                                </div>
-                            @endforeach
-                            @if ($row['interest_cents'] > 0)
-                                <div class="flex justify-between gap-2 py-2 text-xs">
-                                    <span>Encargos registrados</span>
-                                    <strong>R$ {{ \App\Support\FinancialBalance::formatted($row['interest_cents']) }}</strong>
-                                </div>
-                            @endif
-                        </div>
-                    </div>
-                </div>
-            @empty
-                <div class="px-4 py-8 text-center text-sm text-slate-500">
-                    <p>Nenhuma parcela de cartão vence neste mês.</p>
-                    @if ($nextCardMonth !== null)
-                        <p class="mt-2">
-                            Próximo vencimento em <strong>{{ \Carbon\CarbonImmutable::parse($nextCardMonth.'-01')->translatedFormat('F \d\e Y') }}</strong>:
-                            R$ {{ \App\Support\FinancialBalance::formatted($nextCardMonthCents) }} em parcelas.
-                        </p>
-                        <button type="button" wire:click="jumpToCardMonth('{{ $nextCardMonth }}')"
-                                class="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-100">
-                            Ver parcelas de {{ \Carbon\CarbonImmutable::parse($nextCardMonth.'-01')->translatedFormat('F/Y') }}
-                        </button>
-                    @endif
-                </div>
-            @endforelse
-        </div>
-        <p class="mt-3 text-xs text-slate-500">As parcelas são exibidas automaticamente; o saldo bancário só muda ao confirmar o pagamento.</p>
     </section>
 
     <section>
         <div class="flex flex-wrap items-center justify-between gap-3">
-            <h2 class="text-lg font-semibold">Despesas mensais recorrentes</h2>
-            <span class="text-xs text-slate-500">O vencimento é calculado a cada mês</span>
+            <h2 class="text-lg font-semibold">Contas mensais</h2>
+            
         </div>
         <div class="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div class="hidden grid-cols-12 gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 lg:grid">
@@ -240,7 +125,7 @@
                                 @if ($fixed->active || $bill)
                                     <button type="button" wire:click="openOccurrence({{ $fixed->id }})"
                                         class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">
-                                        {{ $bill ? 'Ajustar' : 'Definir valor' }}
+                                        {{ $bill ? 'Alterar valor' : 'Informar valor' }}
                                     </button>
                                 @endif
                                 @if ($bill)
@@ -265,16 +150,13 @@
                 @endforelse
             </div>
         </div>
-        <p class="mt-2 text-xs leading-5 text-slate-500">
-            <strong>Definir valor</strong> confirma a cobrança daquele mês (podendo ajustar valores de água, energia etc.).
-            Só clicar em <strong>Pagar</strong> e confirmar a conta pagadora realizará uma saída financeira.
-        </p>
+
         @error('occurrenceAmount') <p class="mt-2 text-sm text-amber-700">{{ $message }}</p> @enderror
     </section>
 
+    @if ($oneOff->isNotEmpty())
     <section>
-        <h2 class="text-lg font-semibold">Contas avulsas do mês</h2>
-        <p class="mt-1 text-xs text-slate-500">Inclui os lançamentos únicos já registrados na versão anterior do sistema.</p>
+        <h2 class="text-lg font-semibold">Outras contas registradas</h2>
         <div class="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div class="divide-y divide-slate-100">
                 @forelse ($oneOff as $bill)
@@ -308,14 +190,83 @@
             </div>
         </div>
     </section>
+    @endif
+
+    @if ($cardBreakdownOpen && $selectedCardBreakdown)
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 sm:p-6">
+            <div role="dialog" aria-modal="true" aria-labelledby="card-breakdown-title"
+                class="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
+                <div class="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div>
+                        <h2 id="card-breakdown-title" class="text-xl font-semibold text-slate-900">
+                            {{ $selectedCardBreakdown['card']->name }}
+                        </h2>
+                        <p class="mt-1 text-xl font-semibold tabular-nums">
+                            R$ {{ \App\Support\FinancialBalance::formatted($selectedCardBreakdown['amount_cents']) }}
+                        </p>
+                    </div>
+                    <button type="button" wire:click="closeCardBreakdown"
+                        class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-100">
+                        Fechar
+                    </button>
+                </div>
+                <div class="min-h-0 space-y-4 overflow-y-auto pt-4">
+                    @foreach ($selectedCardBreakdown['groups'] as $group)
+                        <div wire:key="card-breakdown-due-{{ $group['invoice']->id }}" class="rounded-xl border border-slate-200 p-4">
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <p class="text-sm font-semibold">Vencimento {{ $group['due_on']->format('d/m/Y') }}</p>
+                                    @if ($group['paid_cents'] > 0)
+                                        <p class="mt-1 text-xs text-slate-500">
+                                            Pago: R$ {{ \App\Support\FinancialBalance::formatted($group['paid_cents']) }}
+                                            · Em aberto: R$ {{ \App\Support\FinancialBalance::formatted($group['remaining_cents']) }}
+                                        </p>
+                                    @endif
+                                </div>
+                                <strong class="text-base tabular-nums">
+                                    R$ {{ \App\Support\FinancialBalance::formatted($group['amount_cents']) }}
+                                </strong>
+                            </div>
+                            <div class="mt-3 divide-y divide-slate-100">
+                                @foreach ($group['items'] as $item)
+                                    <div class="flex items-center justify-between gap-3 py-2 text-sm">
+                                        <div class="min-w-0">
+                                            <p class="break-words font-medium text-slate-800">{{ $item['description'] }}</p>
+                                            @if ($item['installment_label'] !== '')
+                                                <p class="text-xs text-slate-500">
+                                                    Parcela {{ $item['installment_label'] }}
+                                                    @if ($item['advanced']) · Antecipada @endif
+                                                </p>
+                                            @endif
+                                        </div>
+                                        <strong class="shrink-0 tabular-nums">
+                                            R$ {{ \App\Support\FinancialBalance::formatted($item['amount_cents']) }}
+                                        </strong>
+                                    </div>
+                                @endforeach
+                            </div>
+                            @if ($group['is_current_due'] && $group['remaining_cents'] > 0)
+                                <div class="mt-3 flex justify-end">
+                                    <button type="button" wire:click="openCardPayment({{ $group['invoice']->id }})"
+                                        class="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800">
+                                        Registrar pagamento
+                                    </button>
+                                </div>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @endif
 
     @if ($fixedFormOpen)
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 sm:p-6">
             <div role="dialog" aria-modal="true" aria-labelledby="fixed-title" class="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-7">
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <h2 id="fixed-title" class="text-lg font-semibold">{{ $editingFixedId ? 'Editar conta fixa' : 'Nova conta fixa' }}</h2>
-                        <p class="mt-1 text-xs text-slate-500">Recorrência mensal. Não movimenta dinheiro por si só.</p>
+                        <h2 id="fixed-title" class="text-lg font-semibold">{{ $editingFixedId ? 'Editar conta mensal' : 'Cadastrar conta mensal' }}</h2>
+                        <p class="mt-1 text-xs text-slate-500">Vencimento mensal; o valor pode mudar a cada mês.</p>
                     </div>
                     <button type="button" wire:click="closeFixedForm" class="rounded-lg border px-3 py-2 text-sm">Fechar</button>
                 </div>
@@ -327,7 +278,7 @@
                         @error('description') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label for="fixed-amount" class="mb-1 block text-sm font-medium">Valor mensal previsto</label>
+                        <label for="fixed-amount" class="mb-1 block text-sm font-medium">Valor de referência</label>
                         <input id="fixed-amount" wire:model="plannedAmount" data-money-mask inputmode="numeric" required
                             class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm">
                         @error('plannedAmount') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
@@ -359,12 +310,9 @@
                             class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm">
                         @error('notes') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                     </div>
-                    <p class="text-xs leading-5 text-slate-500 sm:col-span-2">
-                        Para contas de valor variável, ajuste o total da cobrança no mês antes de registrar o pagamento.
-                        Nos meses mais curtos, vencimentos nos dias 29–31 serão ajustados para o último dia.
-                    </p>
+
                     <div class="flex flex-wrap gap-2 sm:col-span-2">
-                        <button type="submit" class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white">Salvar conta fixa</button>
+                        <button type="submit" class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white">Salvar conta mensal</button>
                         <button type="button" wire:click="closeFixedForm" class="rounded-xl border px-5 py-3 text-sm">Cancelar</button>
                     </div>
                 </form>
@@ -377,8 +325,8 @@
             <div role="dialog" aria-modal="true" aria-labelledby="occurrence-title" class="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-7">
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <h2 id="occurrence-title" class="text-lg font-semibold">Confirmar cobrança do mês</h2>
-                        <p class="mt-1 text-xs text-slate-500">Competência {{ $selectedMonth }}. O valor pode ser diferente da previsão.</p>
+                        <h2 id="occurrence-title" class="text-lg font-semibold">Informar valor do mês</h2>
+                        <p class="mt-1 text-xs text-slate-500">Competência {{ $selectedMonth }}.</p>
                     </div>
                     <button type="button" wire:click="closeOccurrence" class="rounded-lg border px-3 py-2 text-sm">Fechar</button>
                 </div>

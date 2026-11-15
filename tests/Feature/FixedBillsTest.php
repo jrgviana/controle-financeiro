@@ -65,7 +65,7 @@ class FixedBillsTest extends TestCase
 
         $user = User::factory()->create();
         $this->actingAs($user)->get('/contas-fixas')
-            ->assertOk()->assertSee('Contas fixas')->assertSee('Nova conta fixa');
+            ->assertOk()->assertSee('Contas mensais')->assertSee('Cadastrar conta mensal');
 
         $this->actingAs($user)->get('/contas')
             ->assertOk()->assertSee('Saldo disponível calculado')
@@ -127,11 +127,13 @@ class FixedBillsTest extends TestCase
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-12')
             ->assertSee('Contas do mês')
-            ->assertSee('Cartões do mês')
+            ->assertSee('Pagamentos nos cartões')
             ->assertSee('Total do mês')
             ->assertSee('R$ 120,00')
             ->assertSee('R$ 125,00')
             ->assertViewHas('totalOverviewCents', 24500)
+            ->assertDontSee('Bomba hidráulica')
+            ->call('openCardBreakdown', $card->id)
             ->assertSee('Bomba hidráulica')
             ->assertSee('Parcela 1/1')
             ->assertDontSee('Ver parcelas que compõem esta fatura')
@@ -152,6 +154,30 @@ class FixedBillsTest extends TestCase
             ->assertViewHas('cardInvoiceRemainingCents', 7500);
 
         $this->assertSame(95000, (new FinancialBalance())->currentCents($bank));
+    }
+
+    public function test_monthly_bill_can_change_amount_in_one_month_without_changing_future_month(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
+        $user = User::factory()->create();
+        $fixed = $this->createFixed($user, 'Conta de energia', 'R$ 180,00', 10);
+
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->assertSee('Contas mensais')
+            ->assertSee('Conta de energia')
+            ->assertSee('Cadastrar conta mensal')
+            ->assertDontSee('+ Conta avulsa')
+            ->set('selectedMonth', '2026-12')
+            ->call('openOccurrence', $fixed->id)
+            ->set('occurrenceAmount', 'R$ 232,45')
+            ->call('saveOccurrence')
+            ->assertHasNoErrors()
+            ->assertSee('R$ 232,45')
+            ->set('selectedMonth', '2027-01')
+            ->assertSee('R$ 180,00');
+
+        $this->assertSame('180.00', $fixed->fresh()->planned_amount);
+        $this->assertDatabaseCount('daily_expenses', 0);
     }
 
     public function test_short_months_adjust_due_day_without_changing_saved_default(): void
@@ -252,7 +278,7 @@ class FixedBillsTest extends TestCase
         ]);
 
         Livewire::actingAs($user)->test(FixedBills::class)
-            ->assertSee('Contas avulsas do mês')
+            ->assertSee('Outras contas registradas')
             ->assertSee('Conta de água antiga')
             ->assertSee('R$ 55,50');
     }
