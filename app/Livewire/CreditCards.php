@@ -388,19 +388,6 @@ class CreditCards extends Component
                 ->lockForUpdate()
                 ->findOrFail((int) $data['paymentAccountId']);
 
-            $laterPaid = CreditCardInvoicePayment::query()
-                ->where('user_id', Auth::id())
-                ->whereHas('invoice', fn ($query) => $query
-                    ->where('credit_card_id', $cardId)
-                    ->whereDate('due_on', '>', $lockedInvoice->due_on->toDateString()))
-                ->exists();
-
-            if ($laterPaid) {
-                throw ValidationException::withMessages([
-                    'paymentAmount' => 'Há faturas posteriores com pagamento registrado. Pague a fatura mais recente para preservar o saldo transportado.',
-                ]);
-            }
-
             $row = $ledger->invoices($lockedCard)->first(
                 fn ($entry) => $entry['invoice']->id === $lockedInvoice->id
             );

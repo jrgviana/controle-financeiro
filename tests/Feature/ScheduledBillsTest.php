@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Livewire\CreditCards;
 use App\Livewire\DailyExpenses;
 use App\Livewire\FinancialAccounts;
+use App\Livewire\FixedBills;
 use App\Models\CreditCard;
 use App\Models\CreditCardInvoice;
 use App\Models\DailyExpense;
@@ -46,19 +47,19 @@ class ScheduledBillsTest extends TestCase
 
     private function createBill(User $user, string $amount = 'R$ 135,70'): void
     {
-        Livewire::actingAs($user)->test(FinancialAccounts::class)
-            ->call('openBillForm')
-            ->set('billDescription', 'Conta de energia')
-            ->set('billCategory', 'moradia')
-            ->set('billAmount', $amount)
-            ->set('billDueOn', '2026-12-10')
-            ->call('saveBill')
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->call('openOneOff')
+            ->set('oneOffDescription', 'Conta de energia')
+            ->set('oneOffCategory', 'moradia')
+            ->set('oneOffAmount', $amount)
+            ->set('oneOffDueOn', '2026-12-10')
+            ->call('saveOneOff')
             ->assertHasNoErrors();
     }
 
     public function test_guest_cannot_access_accounts_payables(): void
     {
-        $this->get('/contas')->assertRedirect('/login');
+        $this->get('/contas-fixas')->assertRedirect('/login');
     }
 
     public function test_future_bill_is_not_subtracted_until_paid_and_is_not_income_or_transfer(): void
@@ -81,7 +82,10 @@ class ScheduledBillsTest extends TestCase
         Livewire::actingAs($user)->test(FinancialAccounts::class)
             ->assertSee('Saldo disponível calculado')
             ->assertSee('R$ 1.000,00')
-            ->assertSee('Contas comuns pendentes')
+            ->assertDontSee('Conta de energia');
+
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2026-12')
             ->assertSee('R$ 135,70')
             ->assertSee('Conta de energia');
     }
@@ -94,13 +98,13 @@ class ScheduledBillsTest extends TestCase
         $this->createBill($user);
         $bill = ScheduledBill::firstOrFail();
 
-        Livewire::actingAs($user)->test(FinancialAccounts::class)
-            ->call('openBillPayment', $bill->id)
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->call('openPayment', $bill->id)
             ->set('billPaymentAccountId', (string) $account->id)
             ->set('billPaidOn', '2026-11-15')
-            ->call('confirmBillPayment')
+            ->call('confirmPayment')
             ->assertHasNoErrors()
-            ->assertSee('Conta quitada');
+            ->assertSee('Pagamento registrado');
 
         $bill->refresh();
         $this->assertNotNull($bill->daily_expense_id);
@@ -122,10 +126,10 @@ class ScheduledBillsTest extends TestCase
         $this->createBill($user);
         $bill = ScheduledBill::firstOrFail();
 
-        Livewire::actingAs($user)->test(FinancialAccounts::class)
-            ->call('openBillPayment', $bill->id)
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->call('openPayment', $bill->id)
             ->set('billPaymentAccountId', (string) $account->id)
-            ->call('confirmBillPayment')
+            ->call('confirmPayment')
             ->assertHasErrors(['billPaymentAccountId']);
 
         $this->assertDatabaseCount('daily_expenses', 0);
@@ -160,13 +164,13 @@ class ScheduledBillsTest extends TestCase
         $bill = ScheduledBill::firstOrFail();
         $this->bank($viewer);
 
-        Livewire::actingAs($viewer)->test(FinancialAccounts::class)
+        Livewire::actingAs($viewer)->test(FixedBills::class)
             ->assertDontSee('Conta de energia')
-            ->call('openBillPayment', $bill->id)
+            ->call('openPayment', $bill->id)
             ->assertStatus(404);
     }
 
-    public function test_card_invoice_payment_is_available_in_accounts_and_not_on_card_consultation(): void
+    public function test_card_invoice_payment_is_accessible_only_inside_card_modal(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-25 12:00'));
         $user = User::factory()->create();
@@ -184,20 +188,19 @@ class ScheduledBillsTest extends TestCase
 
         $invoice = $card->invoices()->firstOrFail();
 
-        $this->actingAs($user)->get('/cartoes')
-            ->assertOk()
-            ->assertDontSee('wire:submit="payInvoice"', false)
-            ->assertDontSee('wire:submit="addInterest"', false);
+        $this->actingAs($user)->get('/contas')
+            ->assertOk()->assertDontSee('Faturas de cartão a vencer');
 
-        Livewire::actingAs($user)->test(FinancialAccounts::class)
-            ->assertSee('Faturas de cartão a vencer')
-            ->assertSee('Mastercard')
-            ->call('openCardPayment', $invoice->id)
-            ->set('cardPaymentAccountId', (string) $account->id)
-            ->set('cardPaymentAmount', 'R$ 100,00')
-            ->call('confirmCardPayment')
+        Livewire::actingAs($user)->test(CreditCards::class)
+            ->assertDontSee('Registrar pagamento da fatura')
+            ->call('selectCard', $card->id)
+            ->call('selectInvoice', $invoice->id)
+            ->assertSee('Registrar pagamento da fatura')
+            ->set('paymentAccountId', (string) $account->id)
+            ->set('paymentAmount', 'R$ 100,00')
+            ->call('payInvoice')
             ->assertHasNoErrors()
-            ->assertSee('Pagamento parcial confirmado');
+            ->assertSee('Pagamento parcial registrado');
 
         $this->assertSame(90000, (new FinancialBalance())->currentCents($account));
         $this->assertSame(20000, (new CreditCardLedger())->totalDebt($card));
@@ -223,11 +226,12 @@ class ScheduledBillsTest extends TestCase
         $invoice = $card->invoices()->firstOrFail();
         $this->assertDatabaseCount('credit_card_invoice_charges', 0);
 
-        Livewire::actingAs($user)->test(FinancialAccounts::class)
-            ->call('openCardPayment', $invoice->id)
-            ->set('cardInterestDescription', 'Juros informados')
-            ->set('cardInterestAmount', 'R$ 18,50')
-            ->call('addCardInterest')
+        Livewire::actingAs($user)->test(CreditCards::class)
+            ->call('selectCard', $card->id)
+            ->call('selectInvoice', $invoice->id)
+            ->set('interestDescription', 'Juros informados')
+            ->set('interestAmount', 'R$ 18,50')
+            ->call('addInterest')
             ->assertHasNoErrors();
 
         $this->assertSame(21850, (new CreditCardLedger())->totalDebt($card));
@@ -263,8 +267,18 @@ class ScheduledBillsTest extends TestCase
 
     public function test_card_listing_has_modal_and_no_invoice_details_when_closed(): void
     {
+        $this->travelTo(CarbonImmutable::parse('2026-11-25 12:00'));
         $user = User::factory()->create();
         $card = $this->card($user);
+        Livewire::actingAs($user)->test(DailyExpenses::class)
+            ->set('paymentMethod', 'card')
+            ->set('cardId', (string) $card->id)
+            ->set('description', 'Compra de teste')
+            ->set('amount', 'R$ 75,00')
+            ->set('paidOn', '2026-11-11')
+            ->call('save')
+            ->assertHasNoErrors();
+
         $this->actingAs($user)->get('/cartoes')
             ->assertOk()
             ->assertDontSee('Consulta de faturas')
@@ -275,6 +289,7 @@ class ScheduledBillsTest extends TestCase
             ->call('selectCard', $card->id)
             ->assertSet('invoiceModalOpen', true)
             ->assertSee('Consulta de faturas')
+            ->assertSee('Registrar pagamento da fatura')
             ->call('closeInvoices')
             ->assertSet('invoiceModalOpen', false);
     }

@@ -7,7 +7,7 @@
     <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Olá, {{ auth()->user()->name }}!</h1>
     <p class="mt-3 max-w-2xl text-base leading-7 text-slate-500">Suas contas, gastos pagos, recebimentos confirmados e transferências entre contas.</p>
 
-    <div class="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div class="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div class="flex items-center justify-between gap-3">
                 <h2 class="text-lg font-semibold">Contas financeiras</h2>
@@ -34,6 +34,14 @@
         </section>
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div class="flex items-center justify-between gap-3">
+                <h2 class="text-lg font-semibold">Contas fixas</h2>
+                <span class="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">Mensal</span>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600">Cadastre despesas recorrentes, acompanhe vencimentos e registre pagamentos por competência.</p>
+            <a href="{{ route('contas-fixas.index') }}" class="mt-5 inline-flex rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold transition hover:bg-slate-100">Gerenciar contas fixas</a>
+        </section>
+        <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div class="flex items-center justify-between gap-3">
                 <h2 class="text-lg font-semibold">Cartões</h2>
                 <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Etapa 06</span>
             </div>
@@ -44,6 +52,6 @@
 
     <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
         <h2 class="font-semibold">Próximos módulos</h2>
-        <p class="mt-2 text-sm leading-6 text-slate-500">Transferências e saques são feitos em Minhas contas. Cartões e faturas já podem ser utilizados; crediários e contas a vencer serão desenvolvidos em etapas próprias.</p>
+        <p class="mt-2 text-sm leading-6 text-slate-500">Transferências e saques ficam em Contas. Despesas mensais recorrentes ficam em Contas fixas; pagamentos de faturas e antecipações ficam no modal de Cartões. Crediários serão a próxima etapa.</p>
     </section>
 @endsection
