@@ -1,10 +1,10 @@
 <div class="space-y-8">
     <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
-            <p class="text-sm font-semibold text-sky-700">Etapa 06 · Compras e faturas</p>
+            <p class="text-sm font-semibold text-sky-700">Administração de cartões e faturas</p>
             <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Cartões de crédito</h1>
             <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
-                Cada compra gera parcelas nas faturas correspondentes. O dinheiro só sai da conta bancária ao registrar o pagamento da fatura.
+                Gerencie seus cartões e consulte faturas futuras, vencidas e quitadas. As compras são registradas na tela Gastos.
             </p>
         </div>
         <button type="button" wire:click="openCardForm"
@@ -20,68 +20,68 @@
     @endif
 
     <section>
-        <div class="flex flex-wrap items-end justify-between gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
             <h2 class="text-lg font-semibold">Meus cartões</h2>
-            <div class="text-sm text-slate-500">
-                Total em aberto, incluindo parcelas futuras: <strong class="font-semibold text-slate-900">R$ {{ \App\Support\FinancialBalance::formatted($totalDebtCents) }}</strong>
-            </div>
+            <p class="text-sm text-slate-500">
+                Compromissos em aberto, incluindo parcelas futuras:
+                <strong class="font-semibold text-slate-900">R$ {{ \App\Support\FinancialBalance::formatted($totalDebtCents) }}</strong>
+            </p>
         </div>
 
-        <div class="mt-4 grid gap-3 md:grid-cols-2">
-            @forelse ($summaries as $item)
-                @php $entry = $item['card']; @endphp
-                <div wire:key="card-summary-{{ $entry->id }}"
-                     class="min-w-0 rounded-2xl border bg-white p-5 shadow-sm {{ $card?->id === $entry->id ? 'border-sky-300 ring-1 ring-sky-100' : 'border-slate-200' }}">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div class="hidden gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 lg:grid lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
+                <span>Cartão</span><span>Limite</span><span>Em aberto</span><span>Fechamento / vencimento</span><span>Ações</span>
+            </div>
+            <div class="divide-y divide-slate-100">
+                @forelse ($summaries as $item)
+                    @php $entry = $item['card']; @endphp
+                    <div wire:key="card-summary-{{ $entry->id }}"
+                         class="grid min-w-0 gap-3 px-4 py-4 transition hover:bg-slate-50/70 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center {{ $card?->id === $entry->id ? 'bg-sky-50/40' : '' }}">
                         <div class="min-w-0">
-                            <h3 class="break-words text-base font-semibold text-slate-900">{{ $entry->name }}</h3>
-                            <p class="mt-1 text-xs text-slate-500">{{ $entry->issuer ?: 'Instituição não informada' }}{{ $entry->brand ? ' · '.$entry->brand : '' }}</p>
-                        </div>
-                        <span class="rounded-full px-2 py-1 text-xs font-semibold {{ $entry->active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600' }}">
-                            {{ $entry->active ? 'Ativo' : 'Inativo' }}
-                        </span>
-                    </div>
-                    <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                            <p class="text-xs text-slate-500">Compromissos em aberto</p>
-                            <p class="mt-1 break-words text-lg font-semibold tabular-nums">
-                                R$ {{ \App\Support\FinancialBalance::formatted($item['debt_cents']) }}
+                            <div class="flex flex-wrap items-center gap-2">
+                                <strong class="break-words text-sm text-slate-900">{{ $entry->name }}</strong>
+                                <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold {{ $entry->active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200 text-slate-600' }}">
+                                    {{ $entry->active ? 'Ativo' : 'Inativo' }}
+                                </span>
+                            </div>
+                            <p class="mt-1 break-words text-xs text-slate-500">
+                                {{ $entry->issuer ?: 'Instituição não informada' }}{{ $entry->brand ? ' · '.$entry->brand : '' }}
                             </p>
                         </div>
                         <div>
-                            <p class="text-xs text-slate-500">Limite informado</p>
-                            <p class="mt-1 font-semibold tabular-nums">
+                            <p class="text-xs font-medium text-slate-500 lg:hidden">Limite</p>
+                            <p class="mt-1 break-words text-sm font-medium tabular-nums">
                                 {{ $entry->credit_limit !== null ? 'R$ '.number_format((float) $entry->credit_limit, 2, ',', '.') : 'Não informado' }}
                             </p>
                         </div>
                         <div>
-                            <p class="text-xs text-slate-500">Fecha / vence</p>
-                            <p class="mt-1 font-medium">Dia {{ $entry->closing_day }} / dia {{ $entry->due_day }}</p>
+                            <p class="text-xs font-medium text-slate-500 lg:hidden">Em aberto</p>
+                            <p class="mt-1 break-words text-sm font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($item['debt_cents']) }}</p>
                         </div>
-                        <div>
-                            <p class="text-xs text-slate-500">Próximo melhor dia</p>
-                            <p class="mt-1 font-medium">{{ $item['best_on']->format('d/m/Y') }}</p>
+                        <div class="text-xs">
+                            <p><strong>Fecha:</strong> dia {{ $entry->closing_day }} · <strong>Vence:</strong> dia {{ $entry->due_day }}</p>
+                            <p class="mt-1 text-slate-500">Melhor compra: {{ $item['best_on']->format('d/m/Y') }}</p>
+                        </div>
+                        <div class="flex min-w-0 flex-wrap gap-2">
+                            <button type="button" wire:click="selectCard({{ $entry->id }})"
+                                class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">
+                                {{ $card?->id === $entry->id ? 'Selecionado' : 'Ver faturas' }}
+                            </button>
+                            <button type="button" wire:click="editCard({{ $entry->id }})"
+                                class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-100">Editar</button>
+                            <button type="button" wire:click="toggleCard({{ $entry->id }})"
+                                wire:confirm="{{ $entry->active ? 'Desativar o cartão para novas compras? Faturas existentes serão preservadas.' : 'Reativar este cartão?' }}"
+                                class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-100">
+                                {{ $entry->active ? 'Desativar' : 'Reativar' }}
+                            </button>
                         </div>
                     </div>
-                    <div class="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-                        <button type="button" wire:click="selectCard({{ $entry->id }})"
-                            class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">
-                            {{ $card?->id === $entry->id ? 'Cartão selecionado' : 'Ver compras e faturas' }}
-                        </button>
-                        <button type="button" wire:click="editCard({{ $entry->id }})"
-                            class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">Editar</button>
-                        <button type="button" wire:click="toggleCard({{ $entry->id }})"
-                            wire:confirm="{{ $entry->active ? 'Desativar o cartão para novas compras? As parcelas existentes serão preservadas.' : 'Reativar este cartão?' }}"
-                            class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">
-                            {{ $entry->active ? 'Desativar' : 'Reativar' }}
-                        </button>
+                @empty
+                    <div class="px-6 py-10 text-center text-sm text-slate-600">
+                        Cadastre seu primeiro cartão para consultar e administrar suas faturas.
                     </div>
-                </div>
-            @empty
-                <div class="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center text-sm text-slate-600 md:col-span-2">
-                    Cadastre seu primeiro cartão para começar a lançar compras e acompanhar faturas.
-                </div>
-            @endforelse
+                @endforelse
+            </div>
         </div>
     </section>
 
@@ -147,73 +147,6 @@
     @endif
 
     @if ($card)
-        <section class="rounded-2xl border border-sky-200 bg-white p-5 shadow-sm sm:p-7">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <h2 class="text-lg font-semibold">Lançar compra · {{ $card->name }}</h2>
-                    <p class="mt-1 text-sm text-slate-500">
-                        À vista = 1/1. Parcelada = 1 de N, 2 de N… O lançamento não debita a conta bancária.
-                    </p>
-                </div>
-                @unless ($card->active)
-                    <span class="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">Inativo para novas compras</span>
-                @endunless
-            </div>
-            <form wire:submit="savePurchase" wire:key="card-purchase-{{ $card->id }}-{{ $purchaseFormVersion }}"
-                  class="mt-5 grid gap-4 sm:grid-cols-2">
-                <div>
-                    <label for="purchase-description" class="mb-1 block text-sm font-medium">Descrição da compra</label>
-                    <input id="purchase-description" type="text" wire:model="purchaseDescription" maxlength="160" required
-                        placeholder="Ex.: Celular, supermercado, combustível"
-                        class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-sky-600">
-                    @error('purchaseDescription') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label for="purchase-value" class="mb-1 block text-sm font-medium">Valor total da compra</label>
-                    <input id="purchase-value" type="text" wire:model="purchaseAmount" data-money-mask inputmode="numeric" autocomplete="off"
-                        placeholder="R$ 0,00" required class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium tabular-nums outline-none focus:border-sky-600">
-                    @error('purchaseAmount') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label for="purchase-date" class="mb-1 block text-sm font-medium">Data da compra</label>
-                    <input id="purchase-date" type="date" wire:model="purchaseOn" max="{{ now()->toDateString() }}" required
-                        class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-sky-600">
-                    @error('purchaseOn') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label for="purchase-installments" class="mb-1 block text-sm font-medium">Número de parcelas</label>
-                    <input id="purchase-installments" type="number" wire:model="installmentsCount" min="1" max="60" required
-                        class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-sky-600">
-                    <p class="mt-1 text-xs text-slate-500">Use 1 para compras à vista.</p>
-                    @error('installmentsCount') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label for="purchase-category" class="mb-1 block text-sm font-medium">Categoria</label>
-                    <select id="purchase-category" wire:model="purchaseCategory" required
-                        class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-sky-600">
-                        @foreach ($categories as $key => $label)
-                            <option value="{{ $key }}">{{ $label }}</option>
-                        @endforeach
-                    </select>
-                    @error('purchaseCategory') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label for="purchase-note" class="mb-1 block text-sm font-medium">Observação (opcional)</label>
-                    <input id="purchase-note" type="text" wire:model="purchaseNotes" maxlength="500" placeholder="Detalhes para lembrar"
-                        class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-sky-600">
-                    @error('purchaseNotes') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-                <div class="flex flex-wrap gap-2 sm:col-span-2">
-                    <button type="submit" wire:loading.attr="disabled" wire:target="savePurchase" @disabled(! $card->active)
-                        class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
-                        Registrar compra
-                    </button>
-                    <button type="button" wire:click="clearPurchase"
-                        class="rounded-xl border border-slate-200 px-5 py-3 text-sm font-medium hover:bg-slate-100">Limpar campos</button>
-                </div>
-            </form>
-        </section>
-
         <section>
             <div class="flex flex-wrap items-end justify-between gap-3">
                 <div>
@@ -227,40 +160,57 @@
                     {{ $invoices->count() }} faturas
                 </span>
             </div>
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                @forelse ($invoices as $row)
-                    @php
-                        $invoiceItem = $row['invoice'];
-                        $selectedHere = $selectedInvoice && $selectedInvoice['invoice']->id === $invoiceItem->id;
-                        $isPaid = $row['remaining_cents'] === 0;
-                        $isPartial = $row['paid_cents'] > 0 && ! $isPaid;
-                    @endphp
-                    <button type="button" wire:key="invoice-tile-{{ $invoiceItem->id }}"
-                            wire:click="selectInvoice({{ $invoiceItem->id }})"
-                            class="min-w-0 rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:border-sky-300
-                            {{ $selectedHere ? 'border-sky-300 ring-1 ring-sky-100' : 'border-slate-200' }}">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                            <span class="text-sm font-semibold text-slate-900">{{ $invoiceItem->due_on->format('m/Y') }}</span>
-                            <span class="text-xs font-semibold {{ $isPaid ? 'text-emerald-700' : ($isPartial ? 'text-amber-700' : 'text-slate-500') }}">
-                                {{ $isPaid ? 'Quitada' : ($isPartial ? 'Parcial' : ($invoiceItem->due_on->isPast() ? 'Vencida' : 'A vencer')) }}
-                            </span>
+            <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div class="hidden gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.65fr)]">
+                    <span>Vencimento</span><span>Situação</span><span>Total da fatura</span><span>Saldo em aberto</span><span>Ação</span>
+                </div>
+                <div class="divide-y divide-slate-100">
+                    @forelse ($invoices as $row)
+                        @php
+                            $invoiceItem = $row['invoice'];
+                            $selectedHere = $selectedInvoice && $selectedInvoice['invoice']->id === $invoiceItem->id;
+                            $isPaid = $row['remaining_cents'] === 0;
+                            $isPartial = $row['paid_cents'] > 0 && ! $isPaid;
+                        @endphp
+                        <div wire:key="invoice-line-{{ $invoiceItem->id }}"
+                             class="grid min-w-0 gap-2 px-4 py-4 text-sm lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.65fr)] lg:items-center lg:gap-3 {{ $selectedHere ? 'bg-sky-50/50' : '' }}">
+                            <div>
+                                <p class="font-semibold text-slate-900">{{ $invoiceItem->due_on->format('d/m/Y') }}</p>
+                                <p class="mt-1 text-xs text-slate-500">{{ $invoiceItem->installments->count() }} parcela(s) no mês</p>
+                            </div>
+                            <div>
+                                <span class="text-xs font-semibold {{ $isPaid ? 'text-emerald-700' : ($isPartial ? 'text-amber-700' : 'text-slate-500') }}">
+                                    {{ $isPaid ? 'Quitada' : ($isPartial ? 'Parcial' : ($invoiceItem->due_on->isPast() ? 'Vencida' : 'A vencer')) }}
+                                </span>
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-500 lg:hidden">Total da fatura</p>
+                                <p class="font-medium tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($row['total_cents']) }}</p>
+                                @if ($row['carry_cents'] > 0)
+                                    <p class="mt-1 text-xs text-amber-700">Saldo anterior: R$ {{ \App\Support\FinancialBalance::formatted($row['carry_cents']) }}</p>
+                                @endif
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-500 lg:hidden">Saldo em aberto</p>
+                                <p class="font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($row['remaining_cents']) }}</p>
+                                @if ($row['paid_cents'] > 0)
+                                    <p class="mt-1 text-xs text-slate-500">Pago: R$ {{ \App\Support\FinancialBalance::formatted($row['paid_cents']) }}</p>
+                                @endif
+                            </div>
+                            <div class="flex lg:justify-end">
+                                <button type="button" wire:click="selectInvoice({{ $invoiceItem->id }})"
+                                    class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-100">
+                                    {{ $selectedHere ? 'Selecionada' : 'Detalhes' }}
+                                </button>
+                            </div>
                         </div>
-                        <p class="mt-1 text-xs text-slate-500">Vence em {{ $invoiceItem->due_on->format('d/m/Y') }}</p>
-                        <p class="mt-3 text-xl font-semibold tabular-nums text-slate-900">
-                            R$ {{ \App\Support\FinancialBalance::formatted($row['remaining_cents']) }}
-                        </p>
-                        <p class="mt-1 text-xs text-slate-500">Em aberto · {{ $invoiceItem->installments->count() }} parcela(s)</p>
-                        @if ($row['carry_cents'] > 0)
-                            <p class="mt-2 text-xs text-amber-700">
-                                Inclui saldo anterior projetado: R$ {{ \App\Support\FinancialBalance::formatted($row['carry_cents']) }}
-                            </p>
-                        @endif
-                    </button>
-                @empty
-                    <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-7 text-center text-sm text-slate-500 sm:col-span-2 lg:col-span-3">
-                        Nenhuma fatura ainda. Registre uma compra para gerar as parcelas.
-                    </div>
-                @endforelse
+                    @empty
+                        <div class="px-6 py-10 text-center text-sm text-slate-500">
+                            Nenhuma fatura ainda. Registre compras na tela
+                            <a href="{{ route('gastos.index') }}" class="font-semibold text-sky-700 underline">Gastos</a>.
+                        </div>
+                    @endforelse
+                </div>
             </div>
         </section>
 
@@ -410,23 +360,5 @@
             </section>
         @endif
 
-        <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-            <h2 class="text-lg font-semibold">Compras recentes · {{ $card->name }}</h2>
-            <div class="mt-3 divide-y divide-slate-100">
-                @forelse ($recentPurchases as $purchase)
-                    <div wire:key="card-purchase-line-{{ $purchase->id }}" class="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
-                        <div>
-                            <p class="font-semibold text-slate-900">{{ $purchase->description }}</p>
-                            <p class="mt-1 text-xs text-slate-500">
-                                {{ $purchase->purchased_on->format('d/m/Y') }} · {{ $purchase->installments_count === 1 ? 'À vista · 1 de 1' : $purchase->installments_count.' parcelas' }}
-                            </p>
-                        </div>
-                        <span class="font-semibold tabular-nums">R$ {{ number_format((float) $purchase->amount, 2, ',', '.') }}</span>
-                    </div>
-                @empty
-                    <p class="py-4 text-sm text-slate-500">Nenhuma compra registrada.</p>
-                @endforelse
-            </div>
-        </section>
     @endif
 </div>
