@@ -18,11 +18,11 @@
         </section>
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div class="flex items-center justify-between gap-3">
-                <h2 class="text-lg font-semibold">Gastos diários</h2>
+                <h2 class="text-lg font-semibold">Gastos</h2>
                 <span class="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">Disponível</span>
             </div>
-            <p class="mt-3 text-sm leading-6 text-slate-600">Lance somente pagamentos já realizados.</p>
-            <a href="{{ route('gastos.index') }}" class="mt-5 inline-flex rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold transition hover:bg-slate-100">Lançar gasto</a>
+            <p class="mt-3 text-sm leading-6 text-slate-600">Registre pagamentos já realizados ou compras no cartão, à vista e parceladas.</p>
+            <a href="{{ route('gastos.index') }}" class="mt-5 inline-flex rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold transition hover:bg-slate-100">Registrar gastos</a>
         </section>
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div class="flex items-center justify-between gap-3">
@@ -37,7 +37,7 @@
                 <h2 class="text-lg font-semibold">Cartões</h2>
                 <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Etapa 06</span>
             </div>
-            <p class="mt-3 text-sm leading-6 text-slate-600">Compras 1/N, faturas, juros manuais e pagamentos parciais.</p>
+            <p class="mt-3 text-sm leading-6 text-slate-600">Administre cartões, consulte faturas, registre pagamentos e juros manuais.</p>
             <a href="{{ route('cartoes.index') }}" class="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Gerenciar cartões</a>
         </section>
     </div>
