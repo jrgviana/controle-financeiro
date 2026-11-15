@@ -103,7 +103,7 @@ class DailyExpensesTest extends TestCase
     public function test_logged_in_user_can_open_expenses(): void
     {
         $this->actingAs(User::factory()->create())
-            ->get('/gastos')->assertOk()->assertSee('Gastos diários');
+            ->get('/gastos')->assertOk()->assertSee('Gastos');
     }
 
     public function test_user_can_register_paid_expense_with_money_mask(): void
