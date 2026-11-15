@@ -367,10 +367,14 @@ class DailyExpenses extends Component
         $rows = $paidRows->concat($cardRows)->sort(function ($a, $b) {
             $byDate = strcmp($b['date']->toDateString(), $a['date']->toDateString());
 
-            return $byDate !== 0
-                ? $byDate
-                : (($b['model']->created_at?->timestamp ?? 0) <=> ($a['model']->created_at?->timestamp ?? 0))
-                    ?: ($b['id'] <=> $a['id']);
+            if ($byDate !== 0) {
+                return $byDate;
+            }
+
+            $byTime = ($b['model']->created_at?->timestamp ?? 0)
+                <=> ($a['model']->created_at?->timestamp ?? 0);
+
+            return $byTime !== 0 ? $byTime : ($b['id'] <=> $a['id']);
         })->values();
 
         $page = LengthAwarePaginator::resolveCurrentPage();
