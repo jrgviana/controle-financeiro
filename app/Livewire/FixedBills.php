@@ -3,6 +3,8 @@
 namespace App\Livewire;
 
 use App\Models\FinancialAccount;
+use App\Models\CreditCard;
+use App\Support\CreditCardLedger;
 use App\Models\RecurringBill;
 use App\Models\ScheduledBill;
 use App\Services\PayScheduledBill;
@@ -432,6 +434,44 @@ class FixedBills extends Component
             + $oneOff->filter(fn ($b) => $b->daily_expense_id !== null)
                 ->sum(fn ($b) => FinancialBalance::cents($b->amount));
 
+        // Utilize sempre o vencimento REAL da parcela gravado na fatura
+        // pela lógica de fechamento/melhor dia de compra do cartão.
+        // Não projetar o total da compra para o mês do lançamento.
+        $cardInstallments = collect();
+        $ledger = app(CreditCardLedger::class);
+        foreach (CreditCard::query()->where('user_id', Auth::id())->get() as $card) {
+            foreach ($ledger->invoices($card) as $invoiceRow) {
+                $invoice = $invoiceRow['invoice'];
+                if ($invoice->due_on->format('Y-m') !== $month->format('Y-m')) {
+                    continue;
+                }
+
+                foreach ($invoice->installments as $installment) {
+                    $cardInstallments->push([
+                        'card' => $card,
+                        'invoice' => $invoice,
+                        'installment' => $installment,
+                        'purchase' => $installment->purchase,
+                        'amount_cents' => FinancialBalance::cents($installment->amount),
+                        'advanced' => $installment->advance !== null,
+                        'invoice_paid' => $invoiceRow['remaining_cents'] === 0,
+                        'invoice_partially_paid' => $invoiceRow['paid_cents'] > 0,
+                    ]);
+                }
+            }
+        }
+
+        $cardInstallments = $cardInstallments
+            ->sortBy(fn ($row) => $row['invoice']->due_on->format('Y-m-d')
+                .'|'.$row['card']->name
+                .'|'.str_pad((string) $row['installment']->id, 12, '0', STR_PAD_LEFT))
+            ->values();
+
+        $cardMonthCents = $cardInstallments->sum(fn ($row) => $row['amount_cents']);
+        $cardAdvancedCents = $cardInstallments
+            ->filter(fn ($row) => $row['advanced'])
+            ->sum(fn ($row) => $row['amount_cents']);
+
         $billToPay = $this->billToPayId !== null
             ? ScheduledBill::query()->where('user_id', Auth::id())->find($this->billToPayId)
             : null;
@@ -442,6 +482,10 @@ class FixedBills extends Component
 
         return view('livewire.fixed-bills', [
             'fixedRows' => $fixedRows,
+            'cardInstallments' => $cardInstallments,
+            'cardMonthCents' => $cardMonthCents,
+            'cardAdvancedCents' => $cardAdvancedCents,
+            'totalScheduledCents' => $plannedCents + $cardMonthCents,
             'oneOff' => $oneOff,
             'plannedCents' => $plannedCents,
             'paidCents' => $paidCents,
