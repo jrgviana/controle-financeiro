@@ -57,75 +57,119 @@
     </div>
 
     <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
-                <h2 class="text-lg font-semibold">Parcelas dos cartões que vencem neste mês</h2>
-                <p class="mt-2 max-w-3xl text-xs leading-5 text-slate-500">
-                    As parcelas são exibidas pelo vencimento gerado no fechamento de cada cartão.
-                    Uma compra realizada depois do fechamento entra somente na fatura do próximo ciclo.
-                    Aqui aparece <strong>apenas o valor de cada parcela</strong>, nunca o valor total da compra novamente.
+                <h2 class="text-lg font-semibold">Faturas de cartão do mês</h2>
+                <p class="mt-1 text-xs leading-5 text-slate-500">
+                    Parcela do mês + antecipações programadas. O cartão respeita o fechamento e o vencimento cadastrados.
+                    Nenhum valor é descontado automaticamente do banco.
                 </p>
             </div>
-            <div class="text-left sm:text-right">
-                <p class="text-xs text-slate-500">Parcelas previstas neste mês</p>
+            <div class="sm:text-right">
+                <p class="text-xs text-slate-500">Parcelas com vencimento no mês</p>
                 <p class="mt-1 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($cardMonthCents) }}</p>
                 @if ($cardAdvancedCents > 0)
-                    <p class="mt-1 text-xs font-semibold text-emerald-700">
-                        R$ {{ \App\Support\FinancialBalance::formatted($cardAdvancedCents) }} em parcelas antecipadas
+                    <p class="mt-1 text-xs font-semibold text-sky-700">
+                        Inclui R$ {{ \App\Support\FinancialBalance::formatted($cardAdvancedCents) }} antecipados
                     </p>
                 @endif
+                <p class="mt-1 text-xs text-slate-500">
+                    Saldo das faturas a pagar: R$ {{ \App\Support\FinancialBalance::formatted($cardInvoiceRemainingCents) }}
+                </p>
             </div>
         </div>
 
         <div class="mt-5 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
-            @forelse ($cardInstallments as $row)
+            @forelse ($cardInvoices as $entry)
                 @php
-                    $item = $row['installment'];
-                    $invoice = $row['invoice'];
-                    $purchase = $row['purchase'];
+                    $invoice = $entry['invoice'];
+                    $card = $entry['card'];
+                    $row = $entry['row'];
                 @endphp
-                <div wire:key="monthly-card-installment-{{ $item->id }}"
-                     class="grid min-w-0 gap-2 px-4 py-4 text-sm lg:grid-cols-12 lg:items-center lg:gap-3">
-                    <div class="min-w-0 lg:col-span-4">
-                        <p class="break-words font-semibold text-slate-900">{{ $purchase?->description ?? 'Compra no cartão' }}</p>
-                        <p class="mt-1 break-words text-xs text-slate-500">{{ $row['card']->name }}</p>
+                <div wire:key="fixed-card-invoice-{{ $invoice->id }}" class="px-4 py-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="font-semibold text-slate-900">{{ $card->name }}</p>
+                            <p class="mt-1 text-xs text-slate-500">
+                                Vence {{ $invoice->due_on->format('d/m/Y') }}
+                                · {{ $invoice->installments->count() }} parcela(s)
+                                @if ($entry['planned_advance_cents'] > 0)
+                                    · <span class="font-semibold text-sky-700">Inclui antecipações</span>
+                                @endif
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3 sm:gap-4">
+                            <div class="text-right">
+                                <p class="text-xs text-slate-500">
+                                    {{ $row['remaining_cents'] === 0 ? 'Quitada' : ($row['paid_cents'] > 0 ? 'Saldo após pagamento parcial' : 'A pagar') }}
+                                </p>
+                                <p class="mt-1 font-semibold tabular-nums">
+                                    R$ {{ \App\Support\FinancialBalance::formatted($row['remaining_cents']) }}
+                                </p>
+                            </div>
+                            @if ($row['remaining_cents'] > 0)
+                                <button type="button" wire:click="openCardPayment({{ $invoice->id }})"
+                                        class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">
+                                    Pagar fatura
+                                </button>
+                            @else
+                                <span class="text-xs font-semibold text-emerald-700">Paga</span>
+                            @endif
+                            <a href="{{ route('cartoes.index', ['cartao' => $card->id, 'fatura' => $invoice->id]) }}"
+                               class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">
+                                Detalhes
+                            </a>
+                        </div>
                     </div>
-                    <div class="text-xs lg:col-span-2">
-                        Parcela {{ $item->installment_number }} de {{ $purchase?->installments_count ?? '?' }}
-                    </div>
-                    <div class="text-xs text-slate-600 lg:col-span-2">
-                        Vence {{ $invoice->due_on->format('d/m/Y') }}
-                    </div>
-                    <div class="lg:col-span-2">
-                        <p class="font-semibold tabular-nums">
-                            R$ {{ \App\Support\FinancialBalance::formatted($row['amount_cents']) }}
-                        </p>
-                        <p class="mt-1 text-xs {{ $row['advanced'] || $row['invoice_paid'] ? 'text-emerald-700' : 'text-slate-500' }}">
-                            {{ $row['advanced'] ? 'Antecipada' : ($row['invoice_paid'] ? 'Fatura quitada' : ($row['invoice_partially_paid'] ? 'Fatura parcialmente paga' : ($invoice->due_on->isPast() ? 'Vencida' : 'A vencer'))) }}
-                        </p>
-                    </div>
-                    <div class="lg:col-span-2 lg:text-right">
-                        <a href="{{ route('cartoes.index', ['cartao' => $row['card']->id, 'fatura' => $invoice->id]) }}"
-                           class="inline-flex rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">
-                            Ver fatura
-                        </a>
-                    </div>
+                    <details class="mt-3 rounded-lg bg-slate-50 px-3 py-2">
+                        <summary class="cursor-pointer text-xs font-semibold text-slate-600">Ver parcelas que compõem esta fatura</summary>
+                        <div class="mt-2 divide-y divide-slate-200">
+                            @foreach ($invoice->installments as $installment)
+                                <div class="flex flex-wrap items-start justify-between gap-2 py-2 text-xs" wire:key="monthly-installment-{{ $installment->id }}">
+                                    <div>
+                                        <p class="font-medium text-slate-800">{{ $installment->purchase?->description ?? 'Compra' }}</p>
+                                        <p class="mt-0.5 text-slate-500">
+                                            Parcela {{ $installment->installment_number }}/{{ $installment->purchase?->installments_count ?? '?' }}
+                                            @if ($installment->scheduledPlan)
+                                                · <span class="font-semibold text-sky-700">Antecipada para este mês</span>
+                                            @elseif ($installment->advance)
+                                                · <span class="font-semibold text-emerald-700">Antecipação já paga</span>
+                                            @endif
+                                        </p>
+                                    </div>
+                                    <strong class="tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted(\App\Support\FinancialBalance::cents($installment->amount)) }}</strong>
+                                </div>
+                            @endforeach
+                            @if ($row['interest_cents'] > 0)
+                                <div class="flex justify-between gap-2 py-2 text-xs">
+                                    <span>Encargos registrados</span>
+                                    <strong>R$ {{ \App\Support\FinancialBalance::formatted($row['interest_cents']) }}</strong>
+                                </div>
+                            @endif
+                        </div>
+                    </details>
                 </div>
             @empty
-                <p class="px-5 py-8 text-center text-sm text-slate-500">
-                    Nenhuma parcela de cartão vence no mês selecionado. Consulte outros meses ou os cartões cadastrados.
-                </p>
+                <div class="px-4 py-8 text-center text-sm text-slate-500">
+                    <p>Nenhuma parcela de cartão vence neste mês.</p>
+                    @if ($nextCardMonth !== null)
+                        <p class="mt-2">
+                            Próximo vencimento em <strong>{{ \Carbon\CarbonImmutable::parse($nextCardMonth.'-01')->translatedFormat('F \d\e Y') }}</strong>:
+                            R$ {{ \App\Support\FinancialBalance::formatted($nextCardMonthCents) }} em parcelas.
+                        </p>
+                        <button type="button" wire:click="jumpToCardMonth('{{ $nextCardMonth }}')"
+                                class="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-100">
+                            Ver parcelas de {{ \Carbon\CarbonImmutable::parse($nextCardMonth.'-01')->translatedFormat('F/Y') }}
+                        </button>
+                    @endif
+                </div>
             @endforelse
         </div>
-
-        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-            <p class="text-xs leading-5 text-slate-500">
-                Valores de cartão não são despesas fixas cadastradas novamente.
-                Para pagar ou antecipar, abra o modal da fatura em Cartões.
-            </p>
-            <p class="text-sm font-semibold tabular-nums">
-                Total planejado (fixas + parcelas): R$ {{ \App\Support\FinancialBalance::formatted($totalScheduledCents) }}
-            </p>
+        <div class="mt-3 flex flex-wrap justify-between gap-3 text-xs text-slate-500">
+            <span>O pagamento é feito pelo botão da fatura, e não por cada parcela separadamente.</span>
+            <span class="font-semibold tabular-nums text-slate-800">
+                Total planejado (contas + parcelas): R$ {{ \App\Support\FinancialBalance::formatted($totalScheduledCents) }}
+            </span>
         </div>
     </section>
 
@@ -428,6 +472,64 @@
                     <button type="submit" wire:loading.attr="disabled" wire:target="confirmPayment"
                         class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">
                         Confirmar pagamento integral
+                    </button>
+                </form>
+            </div>
+        </div>
+    @endif
+    @if ($cardPaymentOpen && $cardInvoiceToPay)
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 sm:p-6">
+            <div role="dialog" aria-modal="true" aria-labelledby="card-month-payment-title"
+                 class="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-7">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h2 id="card-month-payment-title" class="text-lg font-semibold">Pagar fatura do cartão</h2>
+                        <p class="mt-1 text-sm text-slate-600">{{ $cardInvoiceToPay['card']->name }}</p>
+                        <p class="mt-1 text-xs text-slate-500">
+                            Vencimento {{ $cardInvoiceToPay['invoice']->due_on->format('d/m/Y') }}
+                        </p>
+                    </div>
+                    <button type="button" wire:click="closeCardPayment" class="rounded-lg border px-3 py-2 text-sm">Fechar</button>
+                </div>
+                <div class="mt-4 rounded-xl bg-slate-50 p-4">
+                    <p class="text-xs text-slate-500">Saldo em aberto da fatura (parcelas normais + antecipadas)</p>
+                    <p class="mt-1 text-2xl font-semibold tabular-nums">
+                        R$ {{ \App\Support\FinancialBalance::formatted($cardInvoiceToPay['row']['remaining_cents']) }}
+                    </p>
+                </div>
+                <form wire:submit="confirmCardPayment" class="mt-5 space-y-4">
+                    <div>
+                        <label for="monthly-card-account" class="mb-1 block text-sm font-medium">Conta de onde sairá o pagamento</label>
+                        <select id="monthly-card-account" wire:model="cardPayAccountId" required
+                                class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                            <option value="">Selecione uma conta</option>
+                            @foreach ($activeAccounts as $account)
+                                <option value="{{ $account->id }}">{{ $account->name }}</option>
+                            @endforeach
+                        </select>
+                        @error('cardPayAccountId') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <label for="monthly-card-amount" class="mb-1 block text-sm font-medium">Valor efetivamente pago</label>
+                            <input id="monthly-card-amount" wire:model="cardPayAmount" data-money-mask inputmode="numeric"
+                                   autocomplete="off" required class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm">
+                            @error('cardPayAmount') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label for="monthly-card-paid-date" class="mb-1 block text-sm font-medium">Data do pagamento</label>
+                            <input id="monthly-card-paid-date" wire:model="cardPayDate" type="date" max="{{ now()->toDateString() }}"
+                                   required class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm">
+                            @error('cardPayDate') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+                    <p class="text-xs leading-5 text-slate-500">
+                        Você pode pagar a fatura inteira ou parte dela. Somente o valor confirmado será descontado da conta.
+                        Para adicionar juros manualmente, abra os detalhes em Cartões.
+                    </p>
+                    <button type="submit" wire:loading.attr="disabled" wire:target="confirmCardPayment"
+                            class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">
+                        Confirmar pagamento da fatura
                     </button>
                 </form>
             </div>
