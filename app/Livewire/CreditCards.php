@@ -65,9 +65,10 @@ class CreditCards extends Component
         $first = CreditCard::query()
             ->where('user_id', Auth::id())
             ->orderBy('name')
-            ->value('id');
+            ->first();
 
-        $this->selectedCardId = $first !== null ? (string) $first : '';
+        $this->selectedCardId = $first !== null ? (string) $first->id : '';
+        $this->selectedInvoiceId = $first !== null ? $this->preferredInvoiceId($first) : '';
         $this->cardFormOpen = $first === null;
         $this->resetPurchaseForm();
         $this->resetInterestForm();
@@ -172,7 +173,7 @@ class CreditCards extends Component
         }
 
         $this->selectedCardId = (string) $card->id;
-        $this->selectedInvoiceId = '';
+        $this->selectedInvoiceId = $this->preferredInvoiceId($card);
         $this->cardFormOpen = false;
         $this->editingCardId = null;
         $this->resetValidation();
@@ -188,11 +189,19 @@ class CreditCards extends Component
             : 'Cartão desativado para novas compras. As faturas e parcelas permanecem.');
     }
 
+    private function preferredInvoiceId(CreditCard $card): string
+    {
+        $rows = app(CreditCardLedger::class)->invoices($card);
+        $row = $rows->first(fn ($entry) => $entry['remaining_cents'] > 0) ?? $rows->last();
+
+        return $row !== null ? (string) $row['invoice']->id : '';
+    }
+
     public function selectCard(int $id): void
     {
-        $this->ownedCard($id);
+        $card = $this->ownedCard($id);
         $this->selectedCardId = (string) $id;
-        $this->selectedInvoiceId = '';
+        $this->selectedInvoiceId = $this->preferredInvoiceId($card);
         $this->resetValidation();
         $this->resetPurchaseForm();
         $this->resetInterestForm();
