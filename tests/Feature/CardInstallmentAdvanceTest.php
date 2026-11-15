@@ -138,7 +138,7 @@ class CardInstallmentAdvanceTest extends TestCase
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-11')
-            ->assertSee('Hiper', false)->assertSee('R$ 125,00');
+            ->assertSee('Cartão Visa')->assertSee('R$ 125,00');
     }
 
     public function test_scheduled_advance_joins_existing_installments_and_pays_as_one_invoice(): void
