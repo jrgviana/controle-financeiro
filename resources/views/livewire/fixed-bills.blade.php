@@ -40,19 +40,28 @@
 
     <div class="grid gap-3 sm:grid-cols-3">
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p class="text-xs font-medium text-slate-500">Contas fixas e avulsas previstas</p>
+            <p class="text-xs font-medium text-slate-500">Contas fixas e avulsas do mês</p>
             <p class="mt-2 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($plannedCents) }}</p>
-            <p class="mt-1 text-xs text-slate-500">Não descontado automaticamente</p>
+            <p class="mt-1 text-xs text-slate-500">
+                R$ {{ \App\Support\FinancialBalance::formatted($paidCents) }} pagos
+                · R$ {{ \App\Support\FinancialBalance::formatted($pendingCents) }} a pagar
+            </p>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p class="text-xs font-medium text-slate-500">Contas fixas e avulsas quitadas</p>
-            <p class="mt-2 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($paidCents) }}</p>
-            <p class="mt-1 text-xs text-slate-500">Pagamentos confirmados</p>
+            <p class="text-xs font-medium text-slate-500">Faturas dos cartões do mês</p>
+            <p class="mt-2 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($cardInvoiceTotalCents) }}</p>
+            <p class="mt-1 text-xs text-slate-500">
+                R$ {{ \App\Support\FinancialBalance::formatted($cardInvoicePaidCents) }} pagos
+                · R$ {{ \App\Support\FinancialBalance::formatted($cardInvoiceRemainingCents) }} a pagar
+            </p>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p class="text-xs font-medium text-slate-500">Contas fixas e avulsas a pagar</p>
-            <p class="mt-2 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($pendingCents) }}</p>
-            <p class="mt-1 text-xs text-slate-500">Compromissos pendentes, sem sinal negativo</p>
+            <p class="text-xs font-medium text-slate-500">Total de compromissos do mês</p>
+            <p class="mt-2 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($totalScheduledCents) }}</p>
+            <p class="mt-1 text-xs text-slate-500">
+                R$ {{ \App\Support\FinancialBalance::formatted($totalPaidCents) }} pagos
+                · R$ {{ \App\Support\FinancialBalance::formatted($totalPendingCents) }} a pagar
+            </p>
         </div>
     </div>
 
@@ -65,18 +74,11 @@
                     Nenhum valor é descontado automaticamente do banco.
                 </p>
             </div>
-            <div class="sm:text-right">
-                <p class="text-xs text-slate-500">Parcelas com vencimento no mês</p>
-                <p class="mt-1 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($cardMonthCents) }}</p>
-                @if ($cardAdvancedCents > 0)
-                    <p class="mt-1 text-xs font-semibold text-sky-700">
-                        Inclui R$ {{ \App\Support\FinancialBalance::formatted($cardAdvancedCents) }} antecipados
-                    </p>
-                @endif
-                <p class="mt-1 text-xs text-slate-500">
-                    Saldo das faturas a pagar: R$ {{ \App\Support\FinancialBalance::formatted($cardInvoiceRemainingCents) }}
+            @if ($cardAdvancedCents > 0)
+                <p class="text-xs font-semibold text-sky-700">
+                    Inclui R$ {{ \App\Support\FinancialBalance::formatted($cardAdvancedCents) }} em antecipações programadas
                 </p>
-            </div>
+            @endif
         </div>
 
         <div class="mt-5 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
@@ -121,9 +123,8 @@
                             </a>
                         </div>
                     </div>
-                    <details class="mt-3 rounded-lg bg-slate-50 px-3 py-2">
-                        <summary class="cursor-pointer text-xs font-semibold text-slate-600">Ver parcelas que compõem esta fatura</summary>
-                        <div class="mt-2 divide-y divide-slate-200">
+                    <div class="mt-3 rounded-lg bg-slate-50 px-3 py-1.5">
+                        <div class="divide-y divide-slate-200">
                             @foreach ($invoice->installments as $installment)
                                 <div class="flex flex-wrap items-start justify-between gap-2 py-2 text-xs" wire:key="monthly-installment-{{ $installment->id }}">
                                     <div>
@@ -147,7 +148,7 @@
                                 </div>
                             @endif
                         </div>
-                    </details>
+                    </div>
                 </div>
             @empty
                 <div class="px-4 py-8 text-center text-sm text-slate-500">
@@ -165,12 +166,7 @@
                 </div>
             @endforelse
         </div>
-        <div class="mt-3 flex flex-wrap justify-between gap-3 text-xs text-slate-500">
-            <span>O pagamento é feito pelo botão da fatura, e não por cada parcela separadamente.</span>
-            <span class="font-semibold tabular-nums text-slate-800">
-                Total planejado (contas + parcelas): R$ {{ \App\Support\FinancialBalance::formatted($totalScheduledCents) }}
-            </span>
-        </div>
+        <p class="mt-3 text-xs text-slate-500">As parcelas são exibidas automaticamente; o saldo bancário só muda ao confirmar o pagamento.</p>
     </section>
 
     <section>
