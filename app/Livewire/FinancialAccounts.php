@@ -598,7 +598,7 @@ class FinancialAccounts extends Component
             'cardDebtCents' => $cardDebtCents,
             'billToPay' => $billToPay,
             'cardInvoiceToPay' => $cardInvoiceToPay,
-            'categories' => AppLivewireDailyExpenses::CATEGORIES,
+            'categories' => DailyExpenses::CATEGORIES,
             'modalSource' => $modalSource,
             'modalSourceBalance' => $modalSource ? FinancialBalance::loadedCents($modalSource) : 0,
             'transferDestinations' => $transferDestinations,
