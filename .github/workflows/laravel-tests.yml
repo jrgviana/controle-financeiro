@@ -29,5 +29,5 @@ jobs:
       - run: php artisan key:generate
       - run: php -l app/Livewire/DailyExpenses.php
       - run: php -l resources/views/livewire/daily-expenses.blade.php
-      - run: php -d display_errors=1 -d memory_limit=512M artisan test --filter=DailyExpensesTest --stop-on-failure -vvv
+      - run: php -d display_errors=1 -d memory_limit=512M artisan test --filter=DailyExpensesTest --stop-on-failure
       - run: php artisan test
