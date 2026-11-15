@@ -30,6 +30,11 @@ class FinancialAccount extends Model
         return $this->hasMany(DailyExpense::class);
     }
 
+    public function receivedIncomes(): HasMany
+    {
+        return $this->hasMany(ReceivedIncome::class);
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

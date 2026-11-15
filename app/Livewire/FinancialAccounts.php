@@ -121,11 +121,13 @@ class FinancialAccounts extends Component
             ->orderByDesc('active')
             ->orderBy('name')
             ->withSum('dailyExpenses as expenses_paid', 'amount')
+            ->withSum('receivedIncomes as income_received', 'amount')
             ->get();
 
         $activeAccounts = $accounts->where('active', true);
         $balanceCents = $activeAccounts->sum(fn ($account) =>
             (int) round((float) $account->initial_balance * 100)
+            + (int) round((float) ($account->income_received ?? 0) * 100)
             - (int) round((float) ($account->expenses_paid ?? 0) * 100)
         );
 
