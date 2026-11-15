@@ -119,7 +119,7 @@ class DailyExpenses extends Component
     {
         $expense = $this->ownedExpense($id);
 
-        if ($expense->scheduledBill()->exists()) {
+        if ($expense->scheduledBill()->exists() || $expense->scheduledBillInstallment()->exists()) {
             session()->flash('error', 'O pagamento está vinculado a uma conta programada. Consulte Minhas contas.');
 
             return;
@@ -291,7 +291,7 @@ class DailyExpenses extends Component
     {
         $expense = $this->ownedExpense($id);
 
-        if ($expense->scheduledBill()->exists()) {
+        if ($expense->scheduledBill()->exists() || $expense->scheduledBillInstallment()->exists()) {
             session()->flash('error', 'Este pagamento está vinculado a uma conta programada e não pode ser removido em Gastos.');
 
             return;
@@ -367,7 +367,7 @@ class DailyExpenses extends Component
         $cardCount = (clone $purchasesQuery)->count();
 
         $paidRows = in_array($this->filterType, ['all', 'account'], true)
-            ? $paidQuery->with(['financialAccount:id,name', 'scheduledBill:id,daily_expense_id'])->get()->map(fn ($expense) => [
+            ? $paidQuery->with(['financialAccount:id,name', 'scheduledBill:id,daily_expense_id', 'scheduledBillInstallment:id,daily_expense_id'])->get()->map(fn ($expense) => [
                 'id' => $expense->id,
                 'date' => $expense->paid_on,
                 'description' => $expense->description,
@@ -376,7 +376,7 @@ class DailyExpenses extends Component
                 'amount' => $expense->amount,
                 'notes' => $expense->notes,
                 'kind' => 'account',
-                'planned' => $expense->scheduledBill !== null,
+                'planned' => $expense->scheduledBill !== null || $expense->scheduledBillInstallment !== null,
                 'model' => $expense,
             ])
             : collect();

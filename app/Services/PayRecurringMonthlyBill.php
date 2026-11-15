@@ -22,7 +22,8 @@ class PayRecurringMonthlyBill
         string $periodMonth,
         int $amountCents,
         int $accountId,
-        string $paidOn
+        string $paidOn,
+        ?int $paidCents = null
     ): void {
         if (! preg_match('/^\d{4}-(?:0[1-9]|1[0-2])$/D', $periodMonth)
             || $amountCents <= 0 || $amountCents > 99999999999) {
@@ -31,7 +32,7 @@ class PayRecurringMonthlyBill
             ]);
         }
 
-        DB::transaction(function () use ($userId, $recurringId, $periodMonth, $amountCents, $accountId, $paidOn): void {
+        DB::transaction(function () use ($userId, $recurringId, $periodMonth, $amountCents, $accountId, $paidOn, $paidCents): void {
             $fixed = RecurringBill::query()->where('user_id', $userId)
                 ->lockForUpdate()->findOrFail($recurringId);
             $month = CarbonImmutable::parse($periodMonth.'-01')->startOfMonth();
@@ -48,6 +49,12 @@ class PayRecurringMonthlyBill
             if ($bill === null && (! $fixed->active || $month->lessThan($fixed->starts_on->startOfMonth()))) {
                 throw ValidationException::withMessages([
                     'paymentAmount' => 'Essa competência não está ativa para pagamento.',
+                ]);
+            }
+
+            if ($bill !== null && $amountCents < $bill->receivedCents()) {
+                throw ValidationException::withMessages([
+                    'paymentAmount' => 'O valor total não pode ser inferior ao já pago.',
                 ]);
             }
 
@@ -71,7 +78,7 @@ class PayRecurringMonthlyBill
                 $bill->update($values);
             }
 
-            app(PayScheduledBill::class)->execute($userId, $bill->id, $accountId, $paidOn);
+            app(PayScheduledBill::class)->execute($userId, $bill->id, $accountId, $paidOn, $paidCents);
         }, 3);
     }
 }

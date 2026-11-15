@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ScheduledBill extends Model
@@ -23,6 +24,29 @@ class ScheduledBill extends Model
     public function recurringBill(): BelongsTo
     {
         return $this->belongsTo(RecurringBill::class);
+    }
+
+    public function partialPayments(): HasMany
+    {
+        return $this->hasMany(ScheduledBillPayment::class);
+    }
+
+    public function receivedCents(): int
+    {
+        if ($this->daily_expense_id !== null) {
+            return \App\Support\FinancialBalance::cents($this->amount);
+        }
+
+        $this->loadMissing('partialPayments.expense');
+
+        return $this->partialPayments->sum(fn ($payment) =>
+            $payment->expense ? \App\Support\FinancialBalance::cents($payment->expense->amount) : 0
+        );
+    }
+
+    public function remainingCents(): int
+    {
+        return max(0, \App\Support\FinancialBalance::cents($this->amount) - $this->receivedCents());
     }
 
     public function payment(): BelongsTo
