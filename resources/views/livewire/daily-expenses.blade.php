@@ -82,13 +82,18 @@
             @if ($paymentMethod === 'card')
                 <div>
                     <label for="expense-card" class="mb-1 block text-sm font-medium">Cartão utilizado</label>
-                    <select id="expense-card" wire:model="cardId" required
+                    <select id="expense-card" wire:model.change.live="cardId" required
                         class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-sky-700 focus:ring-4 focus:ring-sky-100">
                         <option value="">Selecione o cartão</option>
                         @foreach ($activeCards as $creditCard)
                             <option value="{{ $creditCard->id }}">{{ $creditCard->name }} · fecha dia {{ $creditCard->closing_day }}, vence dia {{ $creditCard->due_day }}</option>
                         @endforeach
                     </select>
+                    @if ($selectedCardAvailableCents !== null)
+                        <p class="mt-1 text-xs font-semibold text-slate-600">
+                            Limite disponível: R$ {{ \App\Support\FinancialBalance::formatted($selectedCardAvailableCents) }}
+                        </p>
+                    @endif
                     @error('cardId') <p class="mt-1 text-xs text-red-600" role="alert">{{ $message }}</p> @enderror
                 </div>
                 <div>

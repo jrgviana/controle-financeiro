@@ -7,6 +7,8 @@ use App\Models\CreditCardInstallment;
 use App\Models\CreditCardInvoice;
 use App\Models\CreditCardPurchase;
 use App\Support\CreditCardCycle;
+use App\Support\CreditCardLedger;
+use App\Support\FinancialBalance;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -46,6 +48,24 @@ class RecordCreditCardPurchase
                 throw ValidationException::withMessages([
                     'cardId' => 'Este cartão está desativado e não aceita novas compras.',
                 ]);
+            }
+
+            // O limite vale para o TOTAL da compra, mesmo parcelada, e não
+            // somente para a primeira prestação. Toda a dívida em aberto
+            // compromete o limite até ser efetivamente paga.
+            // O bloqueio no cartão serializa compras simultâneas do mesmo cartão.
+            if ($card->credit_limit !== null) {
+                $limitCents = FinancialBalance::cents($card->credit_limit);
+                $usedCents = app(CreditCardLedger::class)->totalDebt($card);
+                $availableCents = max(0, $limitCents - $usedCents);
+
+                if ($amountCents > $availableCents) {
+                    throw ValidationException::withMessages([
+                        'amount' => 'Compra acima do limite disponível neste cartão. '
+                            .'Disponível: R$ '.FinancialBalance::formatted($availableCents)
+                            .'; compra: R$ '.FinancialBalance::formatted($amountCents).'.',
+                    ]);
+                }
             }
 
             $cycle = app(CreditCardCycle::class);
