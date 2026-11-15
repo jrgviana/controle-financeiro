@@ -15,6 +15,24 @@ class CreditCardInvoice extends Model
         return ['due_on' => 'date'];
     }
 
+    /**
+     * Consulta por data de calendário (não igualdade de string). Isso evita
+     * duplicidade quando SQLite armazena DATE como "YYYY-MM-DD 00:00:00".
+     * O chamador deve bloquear o cartão na transação antes de criar faturas.
+     */
+    public static function forDue(CreditCard $card, string $date): self
+    {
+        return static::query()
+            ->where('credit_card_id', $card->id)
+            ->whereDate('due_on', $date)
+            ->first()
+            ?? static::create([
+                'user_id' => $card->user_id,
+                'credit_card_id' => $card->id,
+                'due_on' => $date,
+            ]);
+    }
+
     public function card(): BelongsTo
     {
         return $this->belongsTo(CreditCard::class, 'credit_card_id');
