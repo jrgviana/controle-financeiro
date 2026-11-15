@@ -120,14 +120,21 @@ class FinancialAccounts extends Component
             ->where('user_id', Auth::id())
             ->orderByDesc('active')
             ->orderBy('name')
+            ->withSum('dailyExpenses as expenses_paid', 'amount')
             ->get();
 
         $activeAccounts = $accounts->where('active', true);
+        $balanceCents = $activeAccounts->sum(fn ($account) =>
+            (int) round((float) $account->initial_balance * 100)
+            - (int) round((float) ($account->expenses_paid ?? 0) * 100)
+        );
 
         return view('livewire.financial-accounts', [
             'accounts' => $accounts,
             'activeCount' => $activeAccounts->count(),
             'initialTotal' => number_format((float) $activeAccounts->sum('initial_balance'), 2, ',', '.'),
+            'estimatedBalance' => number_format(abs($balanceCents) / 100, 2, ',', '.'),
+            'isEstimatedDeficit' => $balanceCents < 0,
         ])->layout('layouts.app');
     }
 }
