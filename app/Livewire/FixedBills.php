@@ -603,6 +603,16 @@ class FixedBills extends Component
         $newPurchaseFirstInstallmentsCents = $cardPurchasesMadeInMonth
             ->sum(fn ($entry) => $entry['first_installment_cents']);
 
+        // O quadro dos cartões mostra os compromissos de seu mês de referência:
+        // faturas que vencem agora + primeiras parcelas das compras novas cujo
+        // vencimento ocorre em mês posterior. Não se somam duas vezes parcelas
+        // que já estão na fatura do mês selecionado.
+        $futureFirstInstallmentsCents = $cardPurchasesMadeInMonth
+            ->filter(fn ($entry) => $entry['first_due_on']?->greaterThan($month->endOfMonth()) ?? false)
+            ->sum(fn ($entry) => $entry['first_installment_cents']);
+        $cardOverviewCents = $cardInvoiceTotalCents + $futureFirstInstallmentsCents;
+        $totalOverviewCents = $plannedCents + $cardOverviewCents;
+
         $cardInvoiceToPay = null;
         if ($this->cardInvoiceToPayId !== null) {
             $cardInvoiceToPay = $cardInvoices
@@ -623,6 +633,8 @@ class FixedBills extends Component
             'cardPurchasesMadeInMonth' => $cardPurchasesMadeInMonth,
             'cardPurchasesMadeCount' => $cardPurchasesMadeCount,
             'newPurchaseFirstInstallmentsCents' => $newPurchaseFirstInstallmentsCents,
+            'cardOverviewCents' => $cardOverviewCents,
+            'totalOverviewCents' => $totalOverviewCents,
             'cardMonthCents' => $cardMonthCents,
             'cardAdvancedCents' => $cardAdvancedCents,
             'cardInvoiceRemainingCents' => $cardInvoiceRemainingCents,

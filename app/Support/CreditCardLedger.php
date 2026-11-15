@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\CreditCard;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
 class CreditCardLedger
@@ -35,7 +36,7 @@ class CreditCardLedger
             $hasOrdinaryPayment = $invoice->payments->contains(
                 fn ($payment) => $payment->installmentAdvances->isEmpty()
             );
-            $carry = ($hasOrdinaryPayment || $invoice->due_on->isPast()) ? $remaining : 0;
+            $carry = ($hasOrdinaryPayment || $invoice->due_on->startOfDay()->lessThan(CarbonImmutable::today())) ? $remaining : 0;
 
             return [
                 'invoice' => $invoice,
