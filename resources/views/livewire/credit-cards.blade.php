@@ -152,9 +152,9 @@
                  class="flex max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-slate-50 p-3 shadow-2xl sm:p-5">
                 <div class="mb-4 flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 pb-4">
                     <div>
-                        <p class="text-xs font-semibold text-sky-700">Faturas e antecipação</p>
+                        <p class="text-xs font-semibold text-sky-700">Faturas e planejamento de parcelas</p>
                         <h2 id="invoices-dialog-title" class="mt-1 text-xl font-semibold text-slate-900">{{ $card->name }}</h2>
-                        <p class="mt-1 text-xs text-slate-500">Escolha um vencimento à esquerda para consultar as parcelas e realizar pagamentos.</p>
+                        <p class="mt-1 text-xs text-slate-500">Escolha um vencimento e marque as parcelas que deseja trazer para outro mês.</p>
                     </div>
                     <button type="button" wire:click="closeInvoices" aria-label="Fechar faturas"
                         class="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-100">Fechar</button>
@@ -190,7 +190,7 @@
                                         <span class="font-semibold tabular-nums text-slate-900">R$ {{ \App\Support\FinancialBalance::formatted($row['remaining_cents']) }}</span>
                                     </span>
                                     <span class="mt-2 block text-xs font-semibold {{ $active ? 'text-sky-700' : 'text-slate-500' }}">
-                                        {{ $active ? 'Detalhes abertos' : 'Consultar parcelas e pagar' }}
+                                        {{ $active ? 'Fatura aberta' : 'Ver parcelas' }}
                                     </span>
                                 </button>
                             @empty
@@ -230,7 +230,7 @@
                                     <h4 class="text-sm font-semibold">Compras e parcelas desta fatura</h4>
                                     @if ($advanceSelectable && $advanceOptions->isNotEmpty())
                                         <span class="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
-                                            Marque as parcelas para antecipar
+                                            Marque para antecipar
                                         </span>
                                     @endif
                                 </div>
@@ -253,8 +253,16 @@
                                                         Parcela {{ $installment->installment_number }} de {{ $installment->purchase?->installments_count ?? '?' }}
                                                         · Compra em {{ $installment->purchase?->purchased_on?->format('d/m/Y') ?? '—' }}
                                                     </p>
-                                                    @if ($installment->advance !== null)
-                                                        <p class="mt-1 text-xs font-semibold text-emerald-700">Antecipada e registrada no saldo</p>
+                                                    @if ($installment->scheduledPlan !== null)
+                                                        <p class="mt-1 text-xs font-semibold text-sky-700">
+                                                            Antecipação programada · origem {{ $installment->scheduledPlan->originalInvoice?->due_on?->format('d/m/Y') }}
+                                                        </p>
+                                                        @if ($current->payments->isEmpty())
+                                                            <button type="button" wire:click="undoPlannedInstallment({{ $installment->id }})"
+                                                                class="mt-1 text-xs font-semibold text-slate-600 underline">Desfazer antecipação</button>
+                                                        @endif
+                                                    @elseif ($installment->advance !== null)
+                                                        <p class="mt-1 text-xs font-semibold text-emerald-700">Antecipada e já paga (registro anterior)</p>
                                                     @endif
                                                 </div>
                                             </div>
@@ -277,47 +285,43 @@
                                 @if ($advanceSelectable && $advanceOptions->isNotEmpty())
                                     <form wire:submit="advanceSelectedInstallments"
                                           class="mt-4 rounded-xl border border-sky-200 bg-sky-50/50 p-4">
-                                        <h4 class="font-semibold">Antecipar parcelas selecionadas</h4>
-                                        <p class="mt-1 text-xs leading-5 text-slate-600">
-                                            Selecione as parcelas acima e confirme o pagamento. Elas continuarão na fatura
-                                            do vencimento original, identificadas como antecipadas, sem duplicar despesas.
-                                        </p>
-                                        <p class="mt-3 text-lg font-semibold tabular-nums">
-                                            Total selecionado: R$ {{ \App\Support\FinancialBalance::formatted($advanceSelectedCents) }}
-                                        </p>
-                                        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                        <div class="flex flex-wrap items-start justify-between gap-2">
                                             <div>
-                                                <label for="advance-account" class="mb-1 block text-xs font-semibold">Conta pagadora</label>
-                                                <select id="advance-account" wire:model="advanceAccountId" required
-                                                        class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
-                                                    <option value="">Selecione a conta</option>
-                                                    @foreach ($accounts as $account)
-                                                        <option value="{{ $account->id }}">{{ $account->name }}</option>
-                                                    @endforeach
-                                                </select>
-                                                @error('advanceAccountId') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                                <h4 class="font-semibold">Programar antecipação</h4>
+                                                <p class="mt-1 text-xs leading-5 text-slate-600">
+                                                    Marque as parcelas acima e escolha o mês em que deseja pagá-las com a fatura.
+                                                    <strong>Antecipar aqui não desconta dinheiro.</strong>
+                                                </p>
                                             </div>
-                                            <div>
-                                                <label for="advance-date" class="mb-1 block text-xs font-semibold">Data do pagamento</label>
-                                                <input id="advance-date" type="date" wire:model="advanceOn" max="{{ now()->toDateString() }}" required
-                                                       class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
-                                                @error('advanceOn') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                                            </div>
+                                            <p class="text-base font-semibold tabular-nums">
+                                                R$ {{ \App\Support\FinancialBalance::formatted($advanceSelectedCents) }}
+                                            </p>
                                         </div>
-                                        @error('advanceInstallmentIds') <p class="mt-2 text-xs font-semibold text-red-600">{{ $message }}</p> @enderror
-                                        <button type="submit" wire:loading.attr="disabled" wire:target="advanceSelectedInstallments"
-                                            @disabled($advanceSelectedCents === 0 || $accounts->isEmpty())
-                                            class="mt-3 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
-                                            Confirmar antecipação
-                                        </button>
+                                        <div class="mt-3 flex flex-wrap items-end gap-3">
+                                            <div>
+                                                <label for="advance-target-month" class="mb-1 block text-xs font-semibold">Mês para pagar</label>
+                                                <input id="advance-target-month" type="month" wire:model="advanceTargetMonth" required
+                                                    class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                                            </div>
+                                            <button type="submit" wire:loading.attr="disabled" wire:target="advanceSelectedInstallments"
+                                                @disabled($advanceSelectedCents === 0)
+                                                class="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                                                Antecipar para Contas fixas
+                                            </button>
+                                        </div>
+                                        @error('advanceInstallmentIds') <p class="mt-2 text-xs text-red-600">{{ $message }}</p> @enderror
+                                        @error('advanceTargetMonth') <p class="mt-2 text-xs text-red-600">{{ $message }}</p> @enderror
                                     </form>
                                 @endif
 
+                                <details class="mt-5 rounded-xl border border-slate-200 bg-white p-4">
+                                    <summary class="cursor-pointer text-sm font-semibold text-slate-700">Outras operações: pagamento parcial, juros e histórico</summary>
+                                    <div class="pt-3">
                 <div class="mt-6 grid gap-4 xl:grid-cols-2">
                     <div class="rounded-xl border border-slate-200 p-4 sm:p-5">
                         <h3 class="font-semibold">Registrar pagamento da fatura</h3>
                         <p class="mt-1 text-xs leading-5 text-slate-500">
-                            Permite quitar ou antecipar uma fatura futura, integral ou parcialmente. Apenas o valor efetivamente pago será descontado da conta escolhida.
+                            Pagamento manual de fatura. Para quitar normalmente, você também pode usar a aba Contas fixas.
                         </p>
                         @if ($open > 0 && $accounts->isNotEmpty())
                             <form wire:submit="payInvoice" wire:key="invoice-payment-{{ $current->id }}-{{ $paymentFormVersion }}" class="mt-4 space-y-3">
@@ -402,6 +406,8 @@
                         @endforelse
                     </div>
                 </div>
+                                    </div>
+                                </details>
                             </div>
                         @else
                             <p class="py-10 text-center text-sm text-slate-500">Selecione um vencimento para consultar suas parcelas.</p>
