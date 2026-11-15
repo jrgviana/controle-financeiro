@@ -62,7 +62,7 @@
             <h2 class="text-lg font-semibold">Compromissos para pagar</h2>
             <div class="text-right">
                 <p class="text-sm font-semibold tabular-nums">
-                    Em aberto: R$ {{ \App\Support\FinancialBalance::formatted($agenda['pending_cents']) }}
+                    Para pagar neste mês: R$ {{ \App\Support\FinancialBalance::formatted($agenda['pending_cents']) }}
                 </p>
                 @if ($agenda['overdue_cents'] > 0)
                     <p class="text-xs font-medium text-amber-700">
