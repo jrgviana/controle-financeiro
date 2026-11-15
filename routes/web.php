@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\PinLoginController;
+use App\Http\Controllers\DashboardController;
 use App\Livewire\DailyExpenses;
 use App\Livewire\FinancialAccounts;
 use App\Livewire\ReceivedIncomes;
@@ -18,7 +19,7 @@ Route::middleware('guest')->group(function (): void {
 });
 
 Route::middleware('auth')->group(function (): void {
-    Route::view('/dashboard', 'dashboard')->name('dashboard');
+    Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::livewire('/contas', FinancialAccounts::class)->name('contas.index');
     Route::livewire('/gastos', DailyExpenses::class)->name('gastos.index');
     Route::livewire('/recebimentos', ReceivedIncomes::class)->name('recebimentos.index');
