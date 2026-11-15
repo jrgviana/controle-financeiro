@@ -3,9 +3,14 @@
 namespace App\Livewire;
 
 use App\Models\DailyExpense;
+use App\Models\CreditCard;
+use App\Models\CreditCardPurchase;
+use App\Services\RecordCreditCardPurchase;
+use App\Support\FinancialBalance;
 use App\Models\FinancialAccount;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -35,6 +40,11 @@ class DailyExpenses extends Component
     public string $notes = '';
     public string $selectedMonth = '';
     public string $filterAccountId = '';
+    public string $paymentMethod = 'account';
+    public string $cardId = '';
+    public int $installmentsCount = 1;
+    public string $filterType = 'all';
+    public string $filterCardId = '';
 
     public function mount(): void
     {
@@ -52,6 +62,31 @@ class DailyExpenses extends Component
         $this->resetPage();
     }
 
+    public function updatedFilterCardId(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedFilterType(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedPaymentMethod(): void
+    {
+        if (! in_array($this->paymentMethod, ['account', 'card'], true)) {
+            $this->paymentMethod = 'account';
+        }
+
+        if ($this->editingId !== null && $this->paymentMethod === 'card') {
+            $this->cancel();
+            $this->paymentMethod = 'card';
+        }
+
+        $this->resetValidation();
+        $this->formVersion++;
+    }
+
     private function resetForm(): void
     {
         $firstId = FinancialAccount::query()
@@ -60,7 +95,15 @@ class DailyExpenses extends Component
             ->orderBy('name')
             ->value('id');
 
+        $activeCardId = CreditCard::query()
+            ->where('user_id', Auth::id())
+            ->where('active', true)
+            ->orderBy('name')
+            ->value('id');
+
         $this->editingId = null;
+        $this->cardId = $activeCardId !== null ? (string) $activeCardId : '';
+        $this->installmentsCount = 1;
         $this->paidOn = now()->toDateString();
         $this->description = '';
         $this->category = 'outros';
@@ -74,6 +117,7 @@ class DailyExpenses extends Component
     {
         $expense = $this->ownedExpense($id);
         $this->resetValidation();
+        $this->paymentMethod = 'account';
         $this->editingId = $expense->id;
         $this->paidOn = $expense->paid_on->toDateString();
         $this->description = $expense->description;
@@ -92,6 +136,12 @@ class DailyExpenses extends Component
 
     public function save(): void
     {
+        if ($this->paymentMethod === 'card') {
+            $this->saveCardPurchase();
+
+            return;
+        }
+
         $data = $this->validate([
             'paidOn' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
             'description' => ['required', 'string', 'min:2', 'max:160'],
@@ -157,6 +207,71 @@ class DailyExpenses extends Component
         $this->resetPage();
     }
 
+
+    private function saveCardPurchase(): void
+    {
+        $data = $this->validate([
+            'paymentMethod' => ['required', Rule::in(['card'])],
+            'paidOn' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'description' => ['required', 'string', 'min:2', 'max:160'],
+            'category' => ['required', Rule::in(array_keys(self::CATEGORIES))],
+            'cardId' => [
+                'required',
+                'integer',
+                Rule::exists('credit_cards', 'id')->where('user_id', Auth::id())->where('active', true),
+            ],
+            'installmentsCount' => ['required', 'integer', 'between:1,60'],
+            'amount' => ['required', 'regex:/^R\$\s*(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}$/D'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ], [
+            'paidOn.before_or_equal' => 'Informe a data em que a compra ocorreu.',
+            'cardId.required' => 'Selecione o cartão utilizado.',
+            'cardId.exists' => 'O cartão selecionado não está ativo ou não pertence à sua conta.',
+            'installmentsCount.between' => 'Escolha de 1 a 60 parcelas.',
+            'amount.regex' => 'Informe um valor como R$ 125,50.',
+        ]);
+
+        $cents = (int) preg_replace('/\D/u', '', $data['amount']);
+
+        if ($cents <= 0 || $cents > 99999999999) {
+            $this->addError('amount', 'O valor deve ser maior que zero e até R$ 999.999.999,99.');
+
+            return;
+        }
+
+        $count = (int) $data['installmentsCount'];
+
+        if ($count > $cents) {
+            $this->addError('installmentsCount', 'Cada parcela deve ter pelo menos R$ 0,01.');
+
+            return;
+        }
+
+        $selectedCardId = (string) $data['cardId'];
+        app(RecordCreditCardPurchase::class)->execute(
+            (int) Auth::id(),
+            (int) $selectedCardId,
+            $data['paidOn'],
+            $data['description'],
+            $data['category'],
+            $cents,
+            $count,
+            $data['notes'] ?? null,
+        );
+
+        $this->selectedMonth = substr($data['paidOn'], 0, 7);
+        $this->filterType = 'card';
+        $this->filterCardId = $selectedCardId;
+        $this->filterAccountId = '';
+        $this->resetValidation();
+        $this->resetForm();
+        $this->cardId = $selectedCardId;
+        $this->resetPage();
+        session()->flash('success', $count === 1
+            ? 'Compra no cartão registrada como 1 de 1. Confira a fatura na aba Cartões.'
+            : 'Compra no cartão registrada: '.$count.' parcelas geradas nas faturas correspondentes.');
+    }
+
     public function delete(int $id): void
     {
         $this->ownedExpense($id)->delete();
@@ -192,18 +307,80 @@ class DailyExpenses extends Component
         $allowedIds = $accounts->pluck('id')->map(fn ($id) => (string) $id);
         $filterId = $allowedIds->contains($this->filterAccountId) ? (int) $this->filterAccountId : null;
 
-        $query = DailyExpense::query()
+        $cards = CreditCard::query()
+            ->where('user_id', Auth::id())
+            ->orderByDesc('active')
+            ->orderBy('name')
+            ->get();
+
+        $activeCards = $cards->where('active', true);
+        $allowedCardIds = $cards->pluck('id')->map(fn ($id) => (string) $id);
+        $cardFilterId = $allowedCardIds->contains($this->filterCardId)
+            ? (int) $this->filterCardId
+            : null;
+
+        $paidQuery = DailyExpense::query()
             ->where('user_id', Auth::id())
             ->whereBetween('paid_on', [$start, $end])
             ->when($filterId !== null, fn ($query) => $query->where('financial_account_id', $filterId));
 
-        $total = (float) (clone $query)->sum('amount');
-        $count = (clone $query)->count();
+        $purchasesQuery = CreditCardPurchase::query()
+            ->where('user_id', Auth::id())
+            ->whereBetween('purchased_on', [$start, $end])
+            ->when($cardFilterId !== null, fn ($query) => $query->where('credit_card_id', $cardFilterId));
 
-        $expenses = $query->with('financialAccount:id,name')
-            ->orderByDesc('paid_on')
-            ->orderByDesc('id')
-            ->paginate(15);
+        $paidTotalCents = FinancialBalance::cents((string) (clone $paidQuery)->sum('amount'));
+        $cardTotalCents = FinancialBalance::cents((string) (clone $purchasesQuery)->sum('amount'));
+        $paidCount = (clone $paidQuery)->count();
+        $cardCount = (clone $purchasesQuery)->count();
+
+        $paidRows = in_array($this->filterType, ['all', 'account'], true)
+            ? $paidQuery->with('financialAccount:id,name')->get()->map(fn ($expense) => [
+                'id' => $expense->id,
+                'date' => $expense->paid_on,
+                'description' => $expense->description,
+                'category' => $expense->category,
+                'origin' => $expense->financialAccount?->name ?? 'Conta indisponível',
+                'amount' => $expense->amount,
+                'notes' => $expense->notes,
+                'kind' => 'account',
+                'model' => $expense,
+            ])
+            : collect();
+
+        $cardRows = in_array($this->filterType, ['all', 'card'], true)
+            ? $purchasesQuery->with('card:id,name')->get()->map(fn ($purchase) => [
+                'id' => $purchase->id,
+                'date' => $purchase->purchased_on,
+                'description' => $purchase->description,
+                'category' => $purchase->category,
+                'origin' => $purchase->card?->name ?? 'Cartão indisponível',
+                'amount' => $purchase->amount,
+                'notes' => $purchase->notes,
+                'kind' => 'card',
+                'model' => $purchase,
+                'card_id' => $purchase->credit_card_id,
+                'installments' => $purchase->installments_count,
+            ])
+            : collect();
+
+        $rows = $paidRows->concat($cardRows)->sort(function ($a, $b) {
+            $byDate = strcmp($b['date']->toDateString(), $a['date']->toDateString());
+
+            return $byDate !== 0
+                ? $byDate
+                : (($b['model']->created_at?->timestamp ?? 0) <=> ($a['model']->created_at?->timestamp ?? 0))
+                    ?: ($b['id'] <=> $a['id']);
+        })->values();
+
+        $page = LengthAwarePaginator::resolveCurrentPage();
+        $movements = new LengthAwarePaginator(
+            $rows->forPage($page, 15)->values(),
+            $rows->count(),
+            15,
+            $page,
+            ['path' => request()->url(), 'query' => request()->query()],
+        );
 
         $editableAccounts = $accounts->filter(fn ($account) => $account->active || (
             $this->editingId !== null && (string) $account->id === $this->accountId
