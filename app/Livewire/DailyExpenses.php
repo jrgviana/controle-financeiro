@@ -45,6 +45,7 @@ class DailyExpenses extends Component
     public int $installmentsCount = 1;
     public string $filterType = 'all';
     public string $filterCardId = '';
+    public int $historyVersion = 0;
 
     public function mount(): void
     {
@@ -201,7 +202,10 @@ class DailyExpenses extends Component
         }
 
         $this->selectedMonth = substr($data['paidOn'], 0, 7);
+        $this->filterType = 'all';
         $this->filterAccountId = '';
+        $this->filterCardId = '';
+        $this->historyVersion++;
         $this->resetValidation();
         $this->resetForm();
         $this->resetPage();
@@ -260,9 +264,12 @@ class DailyExpenses extends Component
         );
 
         $this->selectedMonth = substr($data['paidOn'], 0, 7);
-        $this->filterType = 'card';
-        $this->filterCardId = $selectedCardId;
+        // Não restringir a listagem ao último cartão: dois lançamentos
+        // consecutivos em cartões diferentes precisam aparecer imediatamente.
+        $this->filterType = 'all';
+        $this->filterCardId = '';
         $this->filterAccountId = '';
+        $this->historyVersion++;
         $this->resetValidation();
         $this->resetForm();
         $this->cardId = $selectedCardId;
@@ -275,6 +282,7 @@ class DailyExpenses extends Component
     public function delete(int $id): void
     {
         $this->ownedExpense($id)->delete();
+        $this->historyVersion++;
 
         if ($this->editingId === $id) {
             $this->cancel();
