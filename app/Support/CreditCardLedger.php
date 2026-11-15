@@ -15,7 +15,7 @@ class CreditCardLedger
     public function invoices(CreditCard $card): Collection
     {
         $invoices = $card->invoices()
-            ->with(['installments.purchase', 'installments.advance', 'charges', 'payments.financialAccount', 'payments.installmentAdvances'])
+            ->with(['installments.purchase', 'installments.advance', 'installments.scheduledPlan.originalInvoice', 'charges', 'payments.financialAccount', 'payments.installmentAdvances'])
             ->orderBy('due_on')
             ->get();
 
