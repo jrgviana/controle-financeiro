@@ -20,7 +20,7 @@
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <p class="text-sm font-medium text-slate-500">Saldo disponível calculado</p>
             <p class="mt-3 text-3xl font-semibold tracking-tight tabular-nums">{{ $isEstimatedDeficit ? 'Faltam R$' : 'R$' }} {{ $estimatedBalance }}</p>
-            <p class="mt-2 text-xs text-slate-500">Saldo inicial + recebimentos + transferências recebidas − gastos pagos − transferências enviadas. Não inclui compras no cartão e contas futuras.</p>
+            <p class="mt-2 text-xs text-slate-500">Saldo inicial + recebimentos + transferências recebidas − gastos pagos − transferências enviadas − faturas pagas. Compras ainda não pagas aparecem em Cartões.</p>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <p class="text-sm font-medium text-slate-500">Contas ativas</p>
@@ -106,6 +106,7 @@
                         $expenseCents = \App\Support\FinancialBalance::cents($account->expenses_paid ?? 0);
                         $receivedTransferCents = \App\Support\FinancialBalance::cents($account->transfers_received ?? 0);
                         $sentTransferCents = \App\Support\FinancialBalance::cents($account->transfers_sent ?? 0);
+                        $cardPaymentCents = \App\Support\FinancialBalance::cents($account->card_payments ?? 0);
                         $typeName = [
                             'corrente' => 'Conta corrente',
                             'poupanca' => 'Poupança',
@@ -138,6 +139,7 @@
                             <p class="mb-1 font-semibold text-slate-500 lg:hidden">Saídas</p>
                             <p class="tabular-nums">Gastos: R$ {{ \App\Support\FinancialBalance::formatted($expenseCents) }}</p>
                             <p class="mt-1 tabular-nums">Transf.: R$ {{ \App\Support\FinancialBalance::formatted($sentTransferCents) }}</p>
+                            <p class="mt-1 tabular-nums">Faturas: R$ {{ \App\Support\FinancialBalance::formatted($cardPaymentCents) }}</p>
                         </div>
                         <div class="min-w-0">
                             <p class="mb-1 text-xs font-semibold text-slate-500 lg:hidden">Disponível</p>

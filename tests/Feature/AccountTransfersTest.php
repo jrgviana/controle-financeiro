@@ -67,17 +67,19 @@ class AccountTransfersTest extends TestCase
         $this->get('/transferencias')->assertRedirect('/login');
     }
 
-    public function test_form_is_ready_without_creating_any_transfer(): void
+    public function test_history_screen_is_read_only_and_has_no_transfer_form(): void
     {
         $user = User::factory()->create();
         $this->account($user, 'Itaú', '300.00');
         $this->account($user, 'Neon', '0.00');
 
         Livewire::actingAs($user)->test(AccountTransfers::class)
-            ->assertSee('Nova transferência')
-            ->assertSee('Disponível para transferir: R$')
-            ->assertSee('300,00')
-            ->assertSet('amount', 'R$ 0,00');
+            ->assertSee('Histórico de transferências e saques')
+            ->assertSee('Movimentações realizadas')
+            ->assertDontSee('Confirmar transferência')
+            ->assertDontSee('Nova transferência')
+            ->assertDontSeeHtml('wire:submit="save"')
+            ->assertDontSee('Estornar');
 
         $this->assertDatabaseCount('account_transfers', 0);
     }

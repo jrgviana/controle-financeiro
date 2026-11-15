@@ -282,6 +282,7 @@ class FinancialAccounts extends Component
             ->withSum('receivedIncomes as income_received', 'amount')
             ->withSum('incomingTransfers as transfers_received', 'amount')
             ->withSum('outgoingTransfers as transfers_sent', 'amount')
+            ->withSum('creditCardPayments as card_payments', 'amount')
             ->get();
 
         $activeAccounts = $accounts->where('active', true);

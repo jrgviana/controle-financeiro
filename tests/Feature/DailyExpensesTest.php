@@ -199,10 +199,11 @@ class DailyExpensesTest extends TestCase
     {
         $owner = User::factory()->create();
         $viewer = User::factory()->create();
-        $this->expense($owner, $this->account($owner));
+        $privateExpense = $this->expense($owner, $this->account($owner));
+        $privateExpense->update(['description' => 'Pagamento particular de outro usuário']);
 
         Livewire::actingAs($viewer)->test(DailyExpenses::class)
-            ->assertDontSee('Almoço')
+            ->assertDontSee('Pagamento particular de outro usuário')
             ->assertSee('Nenhum gasto neste período');
     }
 

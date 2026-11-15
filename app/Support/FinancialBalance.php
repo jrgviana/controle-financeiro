@@ -35,7 +35,8 @@ class FinancialBalance
             + self::cents($account->income_received ?? 0)
             + self::cents($account->transfers_received ?? 0)
             - self::cents($account->expenses_paid ?? 0)
-            - self::cents($account->transfers_sent ?? 0);
+            - self::cents($account->transfers_sent ?? 0)
+            - self::cents($account->card_payments ?? 0);
     }
 
     /**
@@ -48,6 +49,7 @@ class FinancialBalance
             + self::cents($account->receivedIncomes()->sum('amount'))
             + self::cents($account->incomingTransfers()->sum('amount'))
             - self::cents($account->dailyExpenses()->sum('amount'))
-            - self::cents($account->outgoingTransfers()->sum('amount'));
+            - self::cents($account->outgoingTransfers()->sum('amount'))
+            - self::cents($account->creditCardPayments()->sum('amount'));
     }
 }
