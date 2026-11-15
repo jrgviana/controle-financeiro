@@ -114,9 +114,9 @@ class ScheduleCreditCardInstallments
                 ->where('credit_card_id', $card->id)
                 ->lockForUpdate()->findOrFail($plan->target_invoice_id);
 
-            if ($target->payments()->exists() || $target->due_on->startOfDay()->lessThan(CarbonImmutable::today())) {
+            if ($target->payments()->exists()) {
                 throw ValidationException::withMessages([
-                    'advanceInstallmentIds' => 'Não é possível desfazer: fatura de destino já recebeu pagamento ou venceu.',
+                    'advanceInstallmentIds' => 'Não é possível desfazer: a fatura de destino já recebeu pagamento.',
                 ]);
             }
 
