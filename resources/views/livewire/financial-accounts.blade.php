@@ -110,9 +110,9 @@
                                 $initialCents = (int) round((float) $account->initial_balance * 100);
                                 $receivedCents = (int) round((float) ($account->income_received ?? 0) * 100);
                                 $spentCents = (int) round((float) ($account->expenses_paid ?? 0) * 100);
-                                $transferInCents = FinancialBalance::cents($account->transfers_received ?? 0);
-                                $transferOutCents = FinancialBalance::cents($account->transfers_sent ?? 0);
-                                $accountBalanceCents = FinancialBalance::loadedCents($account);
+                                $transferInCents = \App\Support\FinancialBalance::cents($account->transfers_received ?? 0);
+                                $transferOutCents = \App\Support\FinancialBalance::cents($account->transfers_sent ?? 0);
+                                $accountBalanceCents = \App\Support\FinancialBalance::loadedCents($account);
                             @endphp
                             <tr wire:key="account-row-{{ $account->id }}" class="transition hover:bg-sky-50/50 {{ $account->active ? '' : 'bg-slate-50/70 text-slate-500' }}">
                                 <th scope="row" class="px-5 py-4 font-semibold text-slate-900">{{ $account->name }}</th>
@@ -124,8 +124,8 @@
                                 <td class="whitespace-nowrap px-5 py-4 text-right tabular-nums text-slate-600">R$ {{ number_format($receivedCents / 100, 2, ',', '.') }}</td>
                                 <td class="whitespace-nowrap px-5 py-4 text-right tabular-nums text-slate-600">R$ {{ number_format($spentCents / 100, 2, ',', '.') }}</td>
                                 <td class="whitespace-nowrap px-5 py-4 text-right text-xs tabular-nums text-slate-600">
-                                    <span class="block">Recebidas: R$ {{ FinancialBalance::formatted($transferInCents) }}</span>
-                                    <span class="mt-1 block">Enviadas: R$ {{ FinancialBalance::formatted($transferOutCents) }}</span>
+                                    <span class="block">Recebidas: R$ {{ \App\Support\FinancialBalance::formatted($transferInCents) }}</span>
+                                    <span class="mt-1 block">Enviadas: R$ {{ \App\Support\FinancialBalance::formatted($transferOutCents) }}</span>
                                 </td>
                                 <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-slate-900">
                                     {{ $accountBalanceCents < 0 ? 'Faltam R$' : 'R$' }} {{ number_format(abs($accountBalanceCents) / 100, 2, ',', '.') }}

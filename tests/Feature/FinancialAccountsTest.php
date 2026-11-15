@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Livewire\FinancialAccounts;
 use App\Models\FinancialAccount;
+use App\Models\AccountTransfer;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -126,6 +127,47 @@ class FinancialAccountsTest extends TestCase
             ->assertSee('Saldo inicial')
             ->assertSee('Conta principal')
             ->assertSeeHtml('<table');
+    }
+
+    public function test_accounts_page_renders_transfers_and_available_balance(): void
+    {
+        $user = User::factory()->create();
+
+        $origin = FinancialAccount::create([
+            'user_id' => $user->id,
+            'name' => 'Itaú',
+            'type' => 'corrente',
+            'initial_balance' => '200.00',
+            'active' => true,
+        ]);
+
+        $destination = FinancialAccount::create([
+            'user_id' => $user->id,
+            'name' => 'Neon',
+            'type' => 'corrente',
+            'initial_balance' => '0.00',
+            'active' => true,
+        ]);
+
+        AccountTransfer::create([
+            'user_id' => $user->id,
+            'from_account_id' => $origin->id,
+            'to_account_id' => $destination->id,
+            'transferred_on' => now()->toDateString(),
+            'amount' => '75.50',
+        ]);
+
+        $this->actingAs($user)
+            ->get('/contas')
+            ->assertOk()
+            ->assertSee('Itaú')
+            ->assertSee('Neon')
+            ->assertSee('Recebidas: R$ 75,50')
+            ->assertSee('Enviadas: R$ 75,50')
+            ->assertSee('R$ 124,50');
+
+        Livewire::actingAs($user)->test(FinancialAccounts::class)
+            ->assertSee('R$ 200,00');
     }
 
     public function test_negative_initial_balance_is_rejected(): void
