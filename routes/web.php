@@ -6,6 +6,7 @@ use App\Livewire\FinancialAccounts;
 use App\Livewire\ReceivedIncomes;
 use App\Livewire\AccountTransfers;
 use App\Livewire\CreditCards;
+use App\Livewire\FixedBills;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -22,5 +23,6 @@ Route::middleware('auth')->group(function (): void {
     Route::livewire('/recebimentos', ReceivedIncomes::class)->name('recebimentos.index');
     Route::livewire('/transferencias', AccountTransfers::class)->name('transferencias.index');
     Route::livewire('/cartoes', CreditCards::class)->name('cartoes.index');
+    Route::livewire('/contas-fixas', FixedBills::class)->name('contas-fixas.index');
     Route::post('/sair', [PinLoginController::class, 'destroy'])->name('logout');
 });
