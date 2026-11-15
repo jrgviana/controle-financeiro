@@ -19,8 +19,11 @@ class PaymentAgenda
     /**
      * Lista compromissos até o mês selecionado sem modificar o banco.
      *
-     * Recorrências sem ocorrência confirmada são prévias virtuais, e as
-     * pendências de meses anteriores mantêm o vencimento original.
+     * O cadastro de recorrência é apenas uma previsão: entra em Pagamentos
+     * somente depois de confirmar a cobrança do mês em Contas mensais.
+     * Contas confirmadas e não pagas mantêm o vencimento original nos meses
+     * seguintes. Adiamentos registrados antes desta regra também continuam
+     * válidos.
      * Para cartões, pagamentos são alocados cronologicamente sobre as
      * parcelas/encargos: saldos transportados NÃO são novas dívidas.
      */
@@ -46,6 +49,13 @@ class PaymentAgenda
             });
 
         $rows = collect();
+        $postponements = PaymentPostponement::query()
+            ->where('user_id', $userId)
+            ->whereDate('from_month', '<=', $from)
+            ->orderBy('from_month')
+            ->get();
+        $priorDeferred = $postponements->groupBy('payable_key');
+
         $plans = RecurringBill::query()->where('user_id', $userId)
             ->whereDate('starts_on', '<=', $to)->orderBy('description')->get();
 
@@ -67,12 +77,17 @@ class PaymentAgenda
                     $handledOccurrences[$bill->id] = true;
                 }
 
-                if (($plan->active || $bill !== null) && $bill?->daily_expense_id === null) {
+                $key = 'recurring:'.$plan->id.':'.$period;
+                // Cadastro recorrente não é uma cobrança. Só consta na lista
+                // se a competência foi confirmada ou se o usuário já havia
+                // registrado um adiamento explícito antes desta alteração.
+                $deferred = $priorDeferred->get($key)?->last();
+                if (($bill !== null || $deferred !== null) && $bill?->daily_expense_id === null) {
                     $due = $bill?->due_on
                         ? CarbonImmutable::parse($bill->due_on->toDateString())
                         : $cursor->addDays(min($plan->due_day, $cursor->daysInMonth) - 1);
                     $remaining = $bill?->remainingCents()
-                        ?? FinancialBalance::cents($plan->planned_amount);
+                        ?? FinancialBalance::cents($deferred->remaining_amount);
                     $paid = $bill?->receivedCents() ?? 0;
 
                     if ($remaining > 0) {
@@ -186,12 +201,6 @@ class PaymentAgenda
         // A dívida permanece com o vencimento original; apenas sua
         // apresentação é adiada ao mês seguinte após a decisão do usuário
         // ou após um pagamento parcial. Nenhum débito é criado.
-        $postponements = PaymentPostponement::query()
-            ->where('user_id', $userId)
-            ->whereDate('from_month', '<=', $from)
-            ->orderBy('from_month')
-            ->get();
-
         $showFrom = $postponements->groupBy('payable_key')->map(
             fn ($events) => $events->max(fn ($event) => $event->to_month->format('Y-m'))
         );
