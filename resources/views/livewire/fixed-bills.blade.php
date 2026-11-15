@@ -2,7 +2,7 @@
     <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
             <p class="text-sm font-semibold text-sky-700">Planejamento e vencimentos</p>
-            <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Contas fixas</h1>
+            <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Contas mensais</h1>
             <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
                 Acompanhe suas contas e pagamentos previstos.
             </p>

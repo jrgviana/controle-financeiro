@@ -34,11 +34,11 @@
         </section>
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div class="flex items-center justify-between gap-3">
-                <h2 class="text-lg font-semibold">Contas fixas</h2>
+                <h2 class="text-lg font-semibold">Contas mensais</h2>
                 <span class="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">Mensal</span>
             </div>
             <p class="mt-3 text-sm leading-6 text-slate-600">Cadastre despesas recorrentes, acompanhe vencimentos e registre pagamentos por competência.</p>
-            <a href="{{ route('contas-fixas.index') }}" class="mt-5 inline-flex rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold transition hover:bg-slate-100">Gerenciar contas fixas</a>
+            <a href="{{ route('contas-fixas.index') }}" class="mt-5 inline-flex rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold transition hover:bg-slate-100">Gerenciar contas mensais</a>
         </section>
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div class="flex items-center justify-between gap-3">
@@ -52,6 +52,6 @@
 
     <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
         <h2 class="font-semibold">Próximos módulos</h2>
-        <p class="mt-2 text-sm leading-6 text-slate-500">Transferências e saques ficam em Contas. Despesas mensais recorrentes ficam em Contas fixas; pagamentos de faturas e antecipações ficam no modal de Cartões. Crediários serão a próxima etapa.</p>
+        <p class="mt-2 text-sm leading-6 text-slate-500">Transferências e saques ficam em Contas. Despesas mensais recorrentes ficam em Contas mensais; pagamentos de faturas e antecipações ficam no modal de Cartões. Crediários serão a próxima etapa.</p>
     </section>
 @endsection
