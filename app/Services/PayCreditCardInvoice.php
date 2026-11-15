@@ -38,17 +38,6 @@ class PayCreditCardInvoice
                 ->where('user_id', $userId)->where('active', true)
                 ->lockForUpdate()->findOrFail($accountId);
 
-            $laterPaid = CreditCardInvoicePayment::query()
-                ->where('user_id', $userId)
-                ->whereHas('invoice', fn ($q) => $q->where('credit_card_id', $card->id)
-                    ->whereDate('due_on', '>', $invoice->due_on->toDateString()))
-                ->exists();
-            if ($laterPaid) {
-                throw ValidationException::withMessages([
-                    'cardPaymentAmount' => 'Já existe pagamento de fatura posterior. Registre o pagamento na fatura mais recente.',
-                ]);
-            }
-
             $row = app(CreditCardLedger::class)->invoices($card)
                 ->first(fn ($entry) => $entry['invoice']->id === $invoice->id);
 
