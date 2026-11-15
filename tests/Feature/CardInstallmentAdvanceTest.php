@@ -157,7 +157,8 @@ class CardInstallmentAdvanceTest extends TestCase
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-11')
             ->assertSee('Antes do fechamento')
-            ->assertDontSee('Depois do fechamento')
+            ->assertSee('Depois do fechamento')
+            ->assertSee('15/12/2026')
             ->assertSee('R$ 50,00');
 
         Livewire::actingAs($user)->test(FixedBills::class)

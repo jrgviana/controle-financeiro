@@ -127,7 +127,7 @@ class FixedBillsTest extends TestCase
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-12')
             ->assertSee('Contas fixas e avulsas do mês')
-            ->assertSee('Faturas dos cartões do mês')
+            ->assertSee('Faturas com vencimento no mês')
             ->assertSee('Total de compromissos do mês')
             ->assertSee('R$ 120,00')
             ->assertSee('R$ 125,00')
