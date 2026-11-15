@@ -48,12 +48,18 @@
             </p>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p class="text-xs font-medium text-slate-500">Faturas dos cartões do mês</p>
+            <p class="text-xs font-medium text-slate-500">Faturas com vencimento no mês</p>
             <p class="mt-2 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($cardInvoiceTotalCents) }}</p>
             <p class="mt-1 text-xs text-slate-500">
                 R$ {{ \App\Support\FinancialBalance::formatted($cardInvoicePaidCents) }} pagos
                 · R$ {{ \App\Support\FinancialBalance::formatted($cardInvoiceRemainingCents) }} a pagar
             </p>
+            @if ($cardPurchasesMadeCount > 0)
+                <p class="mt-2 border-t border-slate-100 pt-2 text-xs font-medium text-sky-700">
+                    {{ $cardPurchasesMadeCount }} compra(s) feita(s) neste mês
+                    · primeiras parcelas: R$ {{ \App\Support\FinancialBalance::formatted($newPurchaseFirstInstallmentsCents) }}
+                </p>
+            @endif
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p class="text-xs font-medium text-slate-500">Total de compromissos do mês</p>
@@ -64,6 +70,67 @@
             </p>
         </div>
     </div>
+
+    <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <h2 class="text-lg font-semibold">Compras no cartão realizadas neste mês</h2>
+                <p class="mt-1 text-xs leading-5 text-slate-500">
+                    Aqui aparecem as compras pela data do lançamento, mesmo que suas parcelas só vençam no mês seguinte.
+                    O pagamento continua programado para o vencimento real de cada cartão.
+                </p>
+            </div>
+            <div class="sm:text-right">
+                <p class="text-xs text-slate-500">{{ $cardPurchasesMadeCount }} compra(s) registrada(s)</p>
+                <p class="mt-1 text-sm font-semibold tabular-nums">
+                    Primeiras parcelas: R$ {{ \App\Support\FinancialBalance::formatted($newPurchaseFirstInstallmentsCents) }}
+                </p>
+                <p class="mt-1 text-xs text-slate-500">Informativo — não somar novamente ao total do mês</p>
+            </div>
+        </div>
+
+        <div class="mt-4 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
+            @forelse ($cardPurchasesMadeInMonth as $entry)
+                @php
+                    $purchase = $entry['purchase'];
+                    $first = $entry['first_installment'];
+                    $dueOn = $entry['first_due_on'];
+                @endphp
+                <div wire:key="purchase-month-{{ $purchase->id }}" class="grid min-w-0 gap-2 px-4 py-3 text-sm lg:grid-cols-[minmax(0,2fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_minmax(0,1fr)_auto] lg:items-center lg:gap-4">
+                    <div class="min-w-0">
+                        <p class="break-words font-semibold text-slate-900">{{ $purchase->description }}</p>
+                        <p class="mt-1 text-xs text-slate-500">
+                            Comprada em {{ $purchase->purchased_on->format('d/m/Y') }}
+                            · {{ $purchase->card?->name ?? 'Cartão indisponível' }}
+                        </p>
+                    </div>
+                    <p class="text-xs text-slate-600">
+                        {{ $first ? 'Parcela 1 de '.$purchase->installments_count : 'Parcelas indisponíveis' }}
+                    </p>
+                    <p class="text-xs text-slate-600">
+                        @if ($dueOn)
+                            Primeira fatura: <span class="font-semibold text-slate-900">{{ $dueOn->format('d/m/Y') }}</span>
+                        @else
+                            Vencimento indisponível
+                        @endif
+                    </p>
+                    <p class="font-semibold tabular-nums">
+                        R$ {{ \App\Support\FinancialBalance::formatted($entry['first_installment_cents']) }}
+                    </p>
+                    @if ($first?->invoice)
+                        <a href="{{ route('cartoes.index', ['cartao' => $purchase->credit_card_id, 'fatura' => $first->credit_card_invoice_id]) }}"
+                            class="w-fit rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">
+                            Ver fatura
+                        </a>
+                    @endif
+                </div>
+            @empty
+                <p class="px-4 py-7 text-center text-sm text-slate-500">
+                    Nenhuma compra no cartão registrada neste mês. Os lançamentos feitos em Gastos aparecem aqui automaticamente.
+                </p>
+            @endforelse
+        </div>
+    </section>
 
     <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div class="flex flex-wrap items-start justify-between gap-3">
