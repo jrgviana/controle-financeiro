@@ -206,6 +206,25 @@ class CardInstallmentAdvanceTest extends TestCase
         $this->assertSame($invoice->id, $installment->fresh()->credit_card_invoice_id);
     }
 
+    public function test_reverting_planned_advance_is_possible_after_due_date_until_payment_is_made(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
+        $user = User::factory()->create();
+        $card = $this->card($user);
+        $this->purchase($user, $card, 'Mercado', 'R$ 100,00', '2026-11-14', 1);
+        $invoice = $card->invoices()->firstOrFail();
+        $installment = $invoice->installments()->firstOrFail();
+
+        app(ScheduleCreditCardInstallments::class)->execute(
+            $user->id, $invoice->id, [$installment->id], '2026-11'
+        );
+        $this->travelTo(CarbonImmutable::parse('2026-11-20 12:00'));
+        app(ScheduleCreditCardInstallments::class)->undo($user->id, $installment->id);
+
+        $this->assertDatabaseCount('credit_card_installment_plans', 0);
+        $this->assertSame($invoice->id, $installment->fresh()->credit_card_invoice_id);
+    }
+
     public function test_prevents_duplicates_foreign_user_and_past_month(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
