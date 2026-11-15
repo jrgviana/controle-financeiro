@@ -107,7 +107,7 @@ class DashboardTest extends TestCase
         $this->assertSame(120000, $overview['card_debt_cents']);
         $this->assertSame(120000, $overview['card_purchases_cents']);
         $this->assertSame(80000, $overview['cards']->first()['remaining_cents']);
-        $this->assertSame(60000, $overview['cards']->first()['usage_pct'] * 1000);
+        $this->assertSame(60, $overview['cards']->first()['usage_pct']);
         $this->assertSame(0, $overview['pending_cents']);
         $this->assertSame(12000, $overview['expense_categories_cents']);
         $this->assertSame('Alimentação', $overview['categories']->first()['name']);
@@ -118,8 +118,7 @@ class DashboardTest extends TestCase
             ->assertOk()->assertSee('R$ 1.380,00')->assertSee('R$ 1.000,00')
             ->assertSee('R$ 120,00')->assertSee('R$ 1.200,00')
             ->assertSee('Platinum')->assertSee('R$ 800,00')
-            ->assertSee('Compra(s)', false) /* charts and cards are real */
-            ;
+            ->assertSee('Compras no cartão neste mês');
     }
 
     public function test_unconfirmed_monthly_forecast_does_not_create_a_payable_until_confirmed(): void
@@ -218,12 +217,12 @@ class DashboardTest extends TestCase
         $this->assertSame('2026-10', $october['trend']->last()['period']);
 
         $this->actingAs($user)->get('/dashboard?period=2026-10')
-            ->assertOk()->assertSee('outubro de 2026')->assertSee('R$ 1.300,00')
+            ->assertOk()->assertSee('Outubro de 2026')->assertSee('R$ 1.300,00')
             ->assertSee('R$ 500,00')->assertSee('R$ 200,00');
 
         // Período inválido ou distante não força leitura ilimitada de recorrências.
         $this->actingAs($user)->get('/dashboard?period=2100-01')
-            ->assertOk()->assertSee('novembro de 2026');
+            ->assertOk()->assertSee('Novembro de 2026');
     }
 
     public function test_dashboard_is_isolated_by_authenticated_user(): void
