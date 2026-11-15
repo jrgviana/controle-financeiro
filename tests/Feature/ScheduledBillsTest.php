@@ -267,8 +267,18 @@ class ScheduledBillsTest extends TestCase
 
     public function test_card_listing_has_modal_and_no_invoice_details_when_closed(): void
     {
+        $this->travelTo(CarbonImmutable::parse('2026-11-25 12:00'));
         $user = User::factory()->create();
         $card = $this->card($user);
+        Livewire::actingAs($user)->test(DailyExpenses::class)
+            ->set('paymentMethod', 'card')
+            ->set('cardId', (string) $card->id)
+            ->set('description', 'Compra de teste')
+            ->set('amount', 'R$ 75,00')
+            ->set('paidOn', '2026-11-11')
+            ->call('save')
+            ->assertHasNoErrors();
+
         $this->actingAs($user)->get('/cartoes')
             ->assertOk()
             ->assertDontSee('Consulta de faturas')
