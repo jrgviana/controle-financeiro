@@ -568,9 +568,11 @@ class PaymentsTest extends TestCase
 
         Livewire::actingAs($user)->test(Payments::class)
             ->set('selectedMonth', '2026-11')
-            ->assertDontSee('Energia')
+            ->assertViewHas('agenda', fn ($agenda) => $agenda['pending']->isEmpty())
+            ->assertSee('Energia')
             ->set('selectedMonth', '2026-12')
             ->assertDontSee('Energia')
+            ->assertViewHas('agenda', fn ($agenda) => $agenda['pending']->isEmpty())
             ->assertSee('Preparar contas mensais')
             ->assertSee('Nenhum compromisso confirmado pendente');
 
