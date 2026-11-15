@@ -237,6 +237,46 @@ class CreditCardsTest extends TestCase
         $this->assertSame(15000, $rows->last()['remaining_cents']);
     }
 
+    public function test_future_invoice_can_be_paid_in_advance_and_previous_invoice_can_still_be_paid_later(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-25 12:00'));
+
+        $user = User::factory()->create();
+        $account = $this->account($user, '1000.00');
+        $card = $this->card($user);
+
+        $this->registerPurchase($user, $card, 'Compra parcelada', 'R$ 200,00', 2, '2026-11-11')
+            ->assertHasNoErrors();
+
+        $invoices = $card->invoices()->orderBy('due_on')->get();
+        $this->assertCount(2, $invoices);
+
+        Livewire::actingAs($user)->test(CreditCards::class)
+            ->call('selectCard', $card->id)
+            ->assertSet('invoiceModalOpen', true)
+            ->call('selectInvoice', $invoices[1]->id)
+            ->set('paymentAccountId', (string) $account->id)
+            ->set('paymentAmount', 'R$ 100,00')
+            ->set('paymentOn', '2026-11-25')
+            ->call('payInvoice')
+            ->assertHasNoErrors();
+
+        $this->assertSame(10000, (new CreditCardLedger())->totalDebt($card));
+
+        Livewire::actingAs($user)->test(CreditCards::class)
+            ->call('selectCard', $card->id)
+            ->call('selectInvoice', $invoices[0]->id)
+            ->set('paymentAccountId', (string) $account->id)
+            ->set('paymentAmount', 'R$ 100,00')
+            ->set('paymentOn', '2026-11-25')
+            ->call('payInvoice')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseCount('credit_card_invoice_payments', 2);
+        $this->assertSame(0, (new CreditCardLedger())->totalDebt($card));
+        $this->assertSame(80000, (new FinancialBalance())->currentCents($account));
+    }
+
     public function test_payment_above_invoice_total_is_rejected(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-25 12:00'));
