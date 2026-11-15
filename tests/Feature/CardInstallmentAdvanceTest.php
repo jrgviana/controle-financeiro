@@ -85,6 +85,67 @@ class CardInstallmentAdvanceTest extends TestCase
         $this->assertSame(300000, (new FinancialBalance())->currentCents($account));
     }
 
+    public function test_november_card_purchases_show_immediately_even_when_first_payment_is_december(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
+        $user = User::factory()->create();
+        $bank = $this->bank($user);
+        $hiper = $this->card($user, 'Hiper', 9, 15);
+        $passai = $this->card($user, 'Passaí', 30, 13);
+
+        $this->purchase($user, $hiper, 'Bomba Hidráulica', 'R$ 1.250,00', '2026-11-14', 10);
+        $this->purchase($user, $passai, 'Pneus do Carro', 'R$ 1.359,60', '2026-11-14', 10);
+        $this->purchase($user, $passai, 'Alinhamento e Balanceamento', 'R$ 309,99', '2026-11-14', 3);
+
+        // Novembro: foram feitas três compras; a primeira fatura é dezembro.
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2026-11')
+            ->assertSee('Compras no cartão realizadas neste mês')
+            ->assertSee('3 compra(s) registrada(s)')
+            ->assertSee('Bomba Hidráulica')
+            ->assertSee('Pneus do Carro')
+            ->assertSee('Alinhamento e Balanceamento')
+            ->assertSee('Parcela 1 de 10')
+            ->assertSee('Parcela 1 de 3')
+            ->assertSee('15/12/2026')
+            ->assertSee('13/12/2026')
+            ->assertSee('R$ 364,29')
+            ->assertSee('R$ 0,00')
+            ->assertSee('Informativo');
+
+        // Dezembro: as três parcelas são efetivamente compromissos do mês.
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2026-12')
+            ->assertSee('R$ 364,29')
+            ->assertSee('Bomba Hidráulica')
+            ->assertSee('Pneus do Carro')
+            ->assertSee('Alinhamento e Balanceamento')
+            ->assertSee('Nenhuma compra no cartão registrada neste mês');
+
+        $this->assertDatabaseCount('credit_card_invoice_payments', 0);
+        $this->assertSame(300000, (new FinancialBalance())->currentCents($bank));
+    }
+
+    public function test_card_purchase_history_uses_purchase_month_not_first_invoice_month(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-12-11 12:00'));
+        $user = User::factory()->create();
+        $card = $this->card($user, 'Cartão Hiper', 9, 15);
+        $this->purchase($user, $card, 'Compra após fechamento de dezembro', 'R$ 90,00', '2026-12-10', 1);
+
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2026-12')
+            ->assertSee('Compra após fechamento de dezembro')
+            ->assertSee('15/01/2027')
+            ->assertSee('Primeiras parcelas: R$ 90,00')
+            ->assertSee('R$ 0,00');
+
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2027-01')
+            ->assertSee('R$ 90,00')
+            ->assertSee('Nenhuma compra no cartão registrada neste mês');
+    }
+
     public function test_purchase_before_and_after_closing_stays_in_correct_month(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
@@ -96,7 +157,8 @@ class CardInstallmentAdvanceTest extends TestCase
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-11')
             ->assertSee('Antes do fechamento')
-            ->assertDontSee('Depois do fechamento')
+            ->assertSee('Depois do fechamento')
+            ->assertSee('15/12/2026')
             ->assertSee('R$ 50,00');
 
         Livewire::actingAs($user)->test(FixedBills::class)

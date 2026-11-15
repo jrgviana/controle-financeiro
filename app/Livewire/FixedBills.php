@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Models\FinancialAccount;
 use App\Models\CreditCard;
 use App\Models\CreditCardInvoice;
+use App\Models\CreditCardPurchase;
 use App\Services\PayCreditCardInvoice;
 use App\Support\CreditCardLedger;
 use App\Models\RecurringBill;
@@ -572,6 +573,36 @@ class FixedBills extends Component
         $totalPaidCents = $paidCents + $cardInvoicePaidCents;
         $totalPendingCents = max(0, $plannedCents - $paidCents) + $cardInvoiceRemainingCents;
 
+        // Duas datas distintas: a data da COMPRA e a do VENCIMENTO.
+        // Uma compra de novembro pode ser paga somente em dezembro ou janeiro.
+        // Este histórico dá visibilidade imediata ao lançamento sem contar a
+        // parcela na competência errada nem criar qualquer débito bancário.
+        $cardPurchasesMadeInMonth = CreditCardPurchase::query()
+            ->where('user_id', Auth::id())
+            ->whereBetween('purchased_on', [$monthStart, $monthEnd])
+            ->with(['card:id,name', 'installments.invoice'])
+            ->orderByDesc('purchased_on')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (CreditCardPurchase $purchase): array {
+                $firstInstallment = $purchase->installments
+                    ->sortBy('installment_number')
+                    ->first();
+
+                return [
+                    'purchase' => $purchase,
+                    'first_installment' => $firstInstallment,
+                    'first_due_on' => $firstInstallment?->invoice?->due_on,
+                    'first_installment_cents' => $firstInstallment
+                        ? FinancialBalance::cents($firstInstallment->amount)
+                        : 0,
+                ];
+            });
+
+        $cardPurchasesMadeCount = $cardPurchasesMadeInMonth->count();
+        $newPurchaseFirstInstallmentsCents = $cardPurchasesMadeInMonth
+            ->sum(fn ($entry) => $entry['first_installment_cents']);
+
         $cardInvoiceToPay = null;
         if ($this->cardInvoiceToPayId !== null) {
             $cardInvoiceToPay = $cardInvoices
@@ -589,6 +620,9 @@ class FixedBills extends Component
         return view('livewire.fixed-bills', [
             'fixedRows' => $fixedRows,
             'cardInvoices' => $cardInvoices,
+            'cardPurchasesMadeInMonth' => $cardPurchasesMadeInMonth,
+            'cardPurchasesMadeCount' => $cardPurchasesMadeCount,
+            'newPurchaseFirstInstallmentsCents' => $newPurchaseFirstInstallmentsCents,
             'cardMonthCents' => $cardMonthCents,
             'cardAdvancedCents' => $cardAdvancedCents,
             'cardInvoiceRemainingCents' => $cardInvoiceRemainingCents,
