@@ -71,10 +71,10 @@ class ScheduledBillsTest extends TestCase
         $this->assertDatabaseHas('scheduled_bills', [
             'user_id' => $user->id,
             'description' => 'Conta de energia',
-            'due_on' => '2026-12-10',
             'amount' => '135.70',
             'daily_expense_id' => null,
         ]);
+        $this->assertSame('2026-12-10', ScheduledBill::firstOrFail()->due_on->toDateString());
         $this->assertSame(100000, (new FinancialBalance())->currentCents($account));
         $this->assertDatabaseCount('daily_expenses', 0);
 
