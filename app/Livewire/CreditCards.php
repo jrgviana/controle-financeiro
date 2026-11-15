@@ -245,8 +245,9 @@ class CreditCards extends Component
         $this->resetPurchaseForm();
     }
 
-    public function savePurchase(CreditCardCycle $cycle): void
+    public function savePurchase(): void
     {
+        $cycle = app(CreditCardCycle::class);
         $card = $this->selectedCard();
 
         if (! $card->active) {
@@ -363,8 +364,10 @@ class CreditCards extends Component
         $this->paymentFormVersion++;
     }
 
-    public function payInvoice(CreditCardCycle $cycle, CreditCardLedger $ledger): void
+    public function payInvoice(): void
     {
+        $cycle = app(CreditCardCycle::class);
+        $ledger = app(CreditCardLedger::class);
         $invoice = $this->ownedInvoice((int) $this->selectedInvoiceId);
         $card = $this->selectedCard();
 
@@ -467,8 +470,10 @@ class CreditCards extends Component
             : 'Pagamento registrado. A fatura foi atualizada.');
     }
 
-    public function render(CreditCardCycle $cycle, CreditCardLedger $ledger)
+    public function render()
     {
+        $cycle = app(CreditCardCycle::class);
+        $ledger = app(CreditCardLedger::class);
         $cards = CreditCard::query()
             ->where('user_id', Auth::id())
             ->orderByDesc('active')

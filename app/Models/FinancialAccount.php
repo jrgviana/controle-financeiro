@@ -45,6 +45,11 @@ class FinancialAccount extends Model
         return $this->hasMany(AccountTransfer::class, 'from_account_id');
     }
 
+    public function creditCardPayments(): HasMany
+    {
+        return $this->hasMany(CreditCardInvoicePayment::class);
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
