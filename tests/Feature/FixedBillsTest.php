@@ -126,12 +126,12 @@ class FixedBillsTest extends TestCase
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-12')
-            ->assertSee('Contas fixas e avulsas do mês')
-            ->assertSee('Faturas com vencimento no mês')
-            ->assertSee('Total de compromissos do mês')
+            ->assertSee('Contas do mês')
+            ->assertSee('Cartões do mês')
+            ->assertSee('Total do mês')
             ->assertSee('R$ 120,00')
             ->assertSee('R$ 125,00')
-            ->assertSee('R$ 245,00')
+            ->assertViewHas('totalOverviewCents', 24500)
             ->assertSee('Bomba hidráulica')
             ->assertSee('Parcela 1/1')
             ->assertDontSee('Ver parcelas que compõem esta fatura')
@@ -147,10 +147,9 @@ class FixedBillsTest extends TestCase
             ->set('cardPayDate', '2026-11-15')
             ->call('confirmCardPayment')
             ->assertHasNoErrors()
-            ->assertSee('R$ 245,00')
-            ->assertSee('R$ 50,00')
-            ->assertSee('R$ 75,00')
-            ->assertSee('R$ 195,00');
+            ->assertViewHas('totalOverviewCents', 24500)
+            ->assertViewHas('cardInvoicePaidCents', 5000)
+            ->assertViewHas('cardInvoiceRemainingCents', 7500);
 
         $this->assertSame(95000, (new FinancialBalance())->currentCents($bank));
     }

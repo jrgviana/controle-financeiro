@@ -100,27 +100,29 @@ class CardInstallmentAdvanceTest extends TestCase
         // Novembro: foram feitas três compras; a primeira fatura é dezembro.
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-11')
-            ->assertSee('Compras no cartão realizadas neste mês')
-            ->assertSee('3 compra(s) registrada(s)')
+            ->assertSee('Compras no cartão neste mês')
+            ->assertSee('3 compra(s)')
             ->assertSee('Bomba Hidráulica')
             ->assertSee('Pneus do Carro')
             ->assertSee('Alinhamento e Balanceamento')
-            ->assertSee('Parcela 1 de 10')
-            ->assertSee('Parcela 1 de 3')
+            ->assertSee('1/10')
+            ->assertSee('1/3')
             ->assertSee('15/12/2026')
             ->assertSee('13/12/2026')
-            ->assertSee('R$ 364,29')
-            ->assertSee('R$ 0,00')
-            ->assertSee('Informativo');
+            ->assertSee('Cartões do mês')
+            ->assertSee('Total do mês')
+            ->assertViewHas('cardOverviewCents', 36429)
+            ->assertViewHas('totalOverviewCents', 36429);
 
         // Dezembro: as três parcelas são efetivamente compromissos do mês.
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-12')
-            ->assertSee('R$ 364,29')
+            ->assertViewHas('cardOverviewCents', 36429)
+            ->assertViewHas('totalOverviewCents', 36429)
             ->assertSee('Bomba Hidráulica')
             ->assertSee('Pneus do Carro')
             ->assertSee('Alinhamento e Balanceamento')
-            ->assertSee('Nenhuma compra no cartão registrada neste mês');
+            ->assertDontSee('Compras no cartão neste mês');
 
         $this->assertDatabaseCount('credit_card_invoice_payments', 0);
         $this->assertSame(300000, (new FinancialBalance())->currentCents($bank));
@@ -137,13 +139,13 @@ class CardInstallmentAdvanceTest extends TestCase
             ->set('selectedMonth', '2026-12')
             ->assertSee('Compra após fechamento de dezembro')
             ->assertSee('15/01/2027')
-            ->assertSee('Primeiras parcelas: R$ 90,00')
-            ->assertSee('R$ 0,00');
+            ->assertViewHas('cardOverviewCents', 9000)
+            ->assertViewHas('totalOverviewCents', 9000);
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2027-01')
-            ->assertSee('R$ 90,00')
-            ->assertSee('Nenhuma compra no cartão registrada neste mês');
+            ->assertViewHas('cardOverviewCents', 9000)
+            ->assertDontSee('Compras no cartão neste mês');
     }
 
     public function test_purchase_before_and_after_closing_stays_in_correct_month(): void
@@ -322,6 +324,34 @@ class CardInstallmentAdvanceTest extends TestCase
         Livewire::actingAs($stranger)->test(CreditCards::class)
             ->call('selectCard', $card->id)
             ->assertStatus(404);
+    }
+
+    public function test_kpi_does_not_count_a_purchase_twice_when_its_first_installment_is_due_in_same_month(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
+        $user = User::factory()->create();
+        $bank = $this->bank($user);
+        $card = $this->card($user, 'Visa', 9, 15);
+
+        $this->purchase($user, $card, 'Compra antes do fechamento', 'R$ 50,00', '2026-11-09', 1);
+        $this->purchase($user, $card, 'Compra após fechamento', 'R$ 60,00', '2026-11-14', 1);
+
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2026-11')
+            ->assertViewHas('cardInvoiceTotalCents', 5000)
+            ->assertViewHas('cardOverviewCents', 11000)
+            ->assertViewHas('totalOverviewCents', 11000)
+            ->assertSee('Compra antes do fechamento')
+            ->assertSee('Compra após fechamento');
+
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2026-12')
+            ->assertViewHas('cardInvoiceTotalCents', 6000)
+            ->assertViewHas('cardOverviewCents', 6000)
+            ->assertViewHas('totalOverviewCents', 6000);
+
+        $this->assertSame(300000, (new FinancialBalance())->currentCents($bank));
+        $this->assertDatabaseCount('credit_card_invoice_payments', 0);
     }
 
     public function test_deep_link_opens_the_invoice_modal_directly(): void
