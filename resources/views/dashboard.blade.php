@@ -5,9 +5,9 @@
 @section('content')
     <p class="text-sm font-semibold text-sky-700">Visão geral</p>
     <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Olá, {{ auth()->user()->name }}!</h1>
-    <p class="mt-3 max-w-2xl text-base leading-7 text-slate-500">Suas contas, gastos pagos e recebimentos confirmados em um só lugar.</p>
+    <p class="mt-3 max-w-2xl text-base leading-7 text-slate-500">Suas contas, gastos pagos, recebimentos confirmados e transferências entre contas.</p>
 
-    <div class="mt-10 grid gap-4 md:grid-cols-3">
+    <div class="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div class="flex items-center justify-between gap-3">
                 <h2 class="text-lg font-semibold">Contas financeiras</h2>
@@ -31,6 +31,14 @@
             </div>
             <p class="mt-3 text-sm leading-6 text-slate-600">Registre salário e outras entradas somente depois de receber.</p>
             <a href="{{ route('recebimentos.index') }}" class="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Registrar entrada</a>
+        </section>
+        <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div class="flex items-center justify-between gap-3">
+                <h2 class="text-lg font-semibold">Transferências</h2>
+                <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Etapa 05</span>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600">Transfira a sobra de uma conta para outra sem duplicar receitas ou despesas.</p>
+            <a href="{{ route('transferencias.index') }}" class="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Transferir entre contas</a>
         </section>
     </div>
 

@@ -35,6 +35,16 @@ class FinancialAccount extends Model
         return $this->hasMany(ReceivedIncome::class);
     }
 
+    public function incomingTransfers(): HasMany
+    {
+        return $this->hasMany(AccountTransfer::class, 'to_account_id');
+    }
+
+    public function outgoingTransfers(): HasMany
+    {
+        return $this->hasMany(AccountTransfer::class, 'from_account_id');
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

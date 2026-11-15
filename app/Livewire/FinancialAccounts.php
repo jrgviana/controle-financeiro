@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Models\FinancialAccount;
+use App\Support\FinancialBalance;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
@@ -122,14 +123,12 @@ class FinancialAccounts extends Component
             ->orderBy('name')
             ->withSum('dailyExpenses as expenses_paid', 'amount')
             ->withSum('receivedIncomes as income_received', 'amount')
+            ->withSum('incomingTransfers as transfers_received', 'amount')
+            ->withSum('outgoingTransfers as transfers_sent', 'amount')
             ->get();
 
         $activeAccounts = $accounts->where('active', true);
-        $balanceCents = $activeAccounts->sum(fn ($account) =>
-            (int) round((float) $account->initial_balance * 100)
-            + (int) round((float) ($account->income_received ?? 0) * 100)
-            - (int) round((float) ($account->expenses_paid ?? 0) * 100)
-        );
+        $balanceCents = $activeAccounts->sum(fn ($account) => FinancialBalance::loadedCents($account));
 
         return view('livewire.financial-accounts', [
             'accounts' => $accounts,

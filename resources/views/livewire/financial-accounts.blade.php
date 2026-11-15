@@ -18,9 +18,9 @@
 
     <section class="mt-8 grid gap-4 sm:grid-cols-2">
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p class="text-sm font-medium text-slate-500">Saldo estimado após movimentações</p>
+            <p class="text-sm font-medium text-slate-500">Saldo disponível calculado</p>
             <p class="mt-3 text-3xl font-semibold tracking-tight tabular-nums">{{ $isEstimatedDeficit ? 'Faltam R$' : 'R$' }} {{ $estimatedBalance }}</p>
-            <p class="mt-2 text-xs text-slate-500">Saldo inicial + recebimentos confirmados − gastos pagos. Cartões e contas futuras ainda não estão incluídos.</p>
+            <p class="mt-2 text-xs text-slate-500">Saldo inicial + recebimentos + transferências recebidas − gastos pagos − transferências enviadas. Não inclui compras no cartão e contas futuras.</p>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <p class="text-sm font-medium text-slate-500">Contas ativas</p>
@@ -89,7 +89,7 @@
 
         <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div class="overflow-x-auto">
-                <table class="min-w-[1280px] w-full border-collapse text-left text-sm">
+                <table class="min-w-[1460px] w-full border-collapse text-left text-sm">
                     <thead class="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
                         <tr>
                             <th scope="col" class="px-5 py-4">Conta</th>
@@ -98,7 +98,8 @@
                             <th scope="col" class="px-5 py-4 text-right">Saldo inicial</th>
                             <th scope="col" class="px-5 py-4 text-right">Recebimentos</th>
                             <th scope="col" class="px-5 py-4 text-right">Gastos pagos</th>
-                            <th scope="col" class="px-5 py-4 text-right">Saldo estimado</th>
+                            <th scope="col" class="px-5 py-4 text-right">Transferências</th>
+                            <th scope="col" class="px-5 py-4 text-right">Disponível calculado</th>
                             <th scope="col" class="px-5 py-4">Situação</th>
                             <th scope="col" class="px-5 py-4 text-right">Ações</th>
                         </tr>
@@ -109,7 +110,9 @@
                                 $initialCents = (int) round((float) $account->initial_balance * 100);
                                 $receivedCents = (int) round((float) ($account->income_received ?? 0) * 100);
                                 $spentCents = (int) round((float) ($account->expenses_paid ?? 0) * 100);
-                                $accountBalanceCents = $initialCents + $receivedCents - $spentCents;
+                                $transferInCents = FinancialBalance::cents($account->transfers_received ?? 0);
+                                $transferOutCents = FinancialBalance::cents($account->transfers_sent ?? 0);
+                                $accountBalanceCents = FinancialBalance::loadedCents($account);
                             @endphp
                             <tr wire:key="account-row-{{ $account->id }}" class="transition hover:bg-sky-50/50 {{ $account->active ? '' : 'bg-slate-50/70 text-slate-500' }}">
                                 <th scope="row" class="px-5 py-4 font-semibold text-slate-900">{{ $account->name }}</th>
@@ -120,6 +123,10 @@
                                 <td class="whitespace-nowrap px-5 py-4 text-right tabular-nums text-slate-600">R$ {{ number_format((float) $account->initial_balance, 2, ',', '.') }}</td>
                                 <td class="whitespace-nowrap px-5 py-4 text-right tabular-nums text-slate-600">R$ {{ number_format($receivedCents / 100, 2, ',', '.') }}</td>
                                 <td class="whitespace-nowrap px-5 py-4 text-right tabular-nums text-slate-600">R$ {{ number_format($spentCents / 100, 2, ',', '.') }}</td>
+                                <td class="whitespace-nowrap px-5 py-4 text-right text-xs tabular-nums text-slate-600">
+                                    <span class="block">Recebidas: R$ {{ FinancialBalance::formatted($transferInCents) }}</span>
+                                    <span class="mt-1 block">Enviadas: R$ {{ FinancialBalance::formatted($transferOutCents) }}</span>
+                                </td>
                                 <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-slate-900">
                                     {{ $accountBalanceCents < 0 ? 'Faltam R$' : 'R$' }} {{ number_format(abs($accountBalanceCents) / 100, 2, ',', '.') }}
                                 </td>
@@ -140,7 +147,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="9" class="px-6 py-12 text-center">
+                                <td colspan="10" class="px-6 py-12 text-center">
                                     <p class="text-lg font-semibold text-slate-900">Nenhuma conta cadastrada</p>
                                     <p class="mt-2 text-sm text-slate-500">Comece cadastrando uma conta bancária ou sua carteira.</p>
                                     <button type="button" wire:click="openCreate" class="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800">Cadastrar primeira conta</button>
