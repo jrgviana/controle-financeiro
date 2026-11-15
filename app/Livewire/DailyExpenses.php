@@ -391,9 +391,14 @@ class DailyExpenses extends Component
             'editableAccounts' => $editableAccounts,
             'hasActiveAccounts' => $accounts->contains('active', true),
             'categories' => self::CATEGORIES,
-            'expenses' => $expenses,
-            'monthTotal' => number_format($total, 2, ',', '.'),
-            'monthCount' => $count,
+            'movements' => $movements,
+            'cards' => $cards,
+            'activeCards' => $activeCards,
+            'hasActiveCards' => $activeCards->isNotEmpty(),
+            'paidTotal' => FinancialBalance::formatted($paidTotalCents),
+            'cardTotal' => FinancialBalance::formatted($cardTotalCents),
+            'paidCount' => $paidCount,
+            'cardCount' => $cardCount,
         ])->layout('layouts.app');
     }
 }
