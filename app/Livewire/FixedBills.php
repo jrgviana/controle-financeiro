@@ -250,6 +250,11 @@ class FixedBills extends Component
             if ($existing?->daily_expense_id !== null) {
                 throw ValidationException::withMessages(['occurrenceAmount' => 'Este mês já foi pago.']);
             }
+            if ($existing !== null && $cents < $existing->receivedCents()) {
+                throw ValidationException::withMessages([
+                    'occurrenceAmount' => 'O valor não pode ser menor que o já pago nesta conta.',
+                ]);
+            }
             if ($existing === null && (! $fixed->active || $fixed->starts_on->startOfMonth()->greaterThan($month))) {
                 throw ValidationException::withMessages(['occurrenceAmount' => 'Conta fixa inativa ou ainda não iniciada.']);
             }
@@ -327,6 +332,11 @@ class FixedBills extends Component
             if ($bill->daily_expense_id !== null || $bill->recurring_bill_id !== null) {
                 throw ValidationException::withMessages(['oneOffDescription' => 'Conta já paga ou vinculada a outra competência.']);
             }
+            if ($cents < $bill->receivedCents()) {
+                throw ValidationException::withMessages([
+                    'oneOffAmount' => 'O valor não pode ser menor que o já pago nesta conta.',
+                ]);
+            }
             $bill->update($values);
         } else {
             ScheduledBill::create(['user_id' => Auth::id(), ...$values]);
@@ -340,8 +350,8 @@ class FixedBills extends Component
     public function removeOneOff(int $id): void
     {
         $bill = $this->ownedBill($id);
-        if ($bill->recurring_bill_id !== null || $bill->daily_expense_id !== null) {
-            throw ValidationException::withMessages(['oneOffDescription' => 'Conta vinculada ou já paga não pode ser cancelada.']);
+        if ($bill->recurring_bill_id !== null || $bill->daily_expense_id !== null || $bill->receivedCents() > 0) {
+            throw ValidationException::withMessages(['oneOffDescription' => 'Conta com pagamento registrado não pode ser cancelada.']);
         }
         $bill->delete();
         session()->flash('success', 'Cobrança avulsa cancelada sem alterar os saldos.');

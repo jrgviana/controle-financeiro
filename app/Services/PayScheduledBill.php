@@ -5,15 +5,21 @@ namespace App\Services;
 use App\Models\DailyExpense;
 use App\Models\FinancialAccount;
 use App\Models\ScheduledBill;
+use App\Models\ScheduledBillPayment;
 use App\Support\FinancialBalance;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class PayScheduledBill
 {
-    public function execute(int $userId, int $billId, int $accountId, string $paidOn): DailyExpense
-    {
-        return DB::transaction(function () use ($userId, $billId, $accountId, $paidOn): DailyExpense {
+    /**
+     * Permite pagamento integral ou parcial, sem perder o valor original
+     * da cobrança. Cada parcela paga cria exatamente um gasto bancário.
+     */
+    public function execute(
+        int $userId, int $billId, int $accountId, string $paidOn, ?int $cents = null
+    ): DailyExpense {
+        return DB::transaction(function () use ($userId, $billId, $accountId, $paidOn, $cents): DailyExpense {
             $account = FinancialAccount::query()
                 ->where('user_id', $userId)->where('active', true)
                 ->lockForUpdate()->findOrFail($accountId);
@@ -23,16 +29,22 @@ class PayScheduledBill
 
             if ($bill->daily_expense_id !== null) {
                 throw ValidationException::withMessages([
-                    'billPaymentAccountId' => 'Esta conta a vencer já foi quitada.',
+                    'billPaymentAccountId' => 'Esta conta já foi quitada.',
                 ]);
             }
 
-            $amountCents = FinancialBalance::cents($bill->amount);
-            $availableCents = (new FinancialBalance())->currentCents($account);
-
-            if ($availableCents < $amountCents) {
+            $remaining = $bill->remainingCents();
+            $amount = $cents ?? $remaining;
+            if ($amount <= 0 || $amount > $remaining) {
                 throw ValidationException::withMessages([
-                    'billPaymentAccountId' => 'Saldo insuficiente. Disponível: R$ '.FinancialBalance::formatted(max(0, $availableCents)),
+                    'billPaymentAccountId' => 'O valor ultrapassa o saldo em aberto desta conta.',
+                ]);
+            }
+
+            $available = (new FinancialBalance())->currentCents($account);
+            if ($available < $amount) {
+                throw ValidationException::withMessages([
+                    'billPaymentAccountId' => 'Saldo insuficiente. Disponível: R$ '.FinancialBalance::formatted(max(0, $available)),
                 ]);
             }
 
@@ -42,12 +54,20 @@ class PayScheduledBill
                 'paid_on' => $paidOn,
                 'description' => $bill->description,
                 'category' => $bill->category,
-                'amount' => $bill->amount,
-                'notes' => trim('Conta programada · Vencimento '.$bill->due_on->format('d/m/Y')
+                'amount' => number_format($amount / 100, 2, '.', ''),
+                'notes' => trim('Pagamento de conta · Vencimento '.$bill->due_on->format('d/m/Y')
                     .($bill->notes ? ' · '.$bill->notes : '')),
             ]);
 
-            $bill->update(['daily_expense_id' => $expense->id]);
+            ScheduledBillPayment::create([
+                'user_id' => $userId,
+                'scheduled_bill_id' => $bill->id,
+                'daily_expense_id' => $expense->id,
+            ]);
+
+            if ($amount === $remaining) {
+                $bill->update(['daily_expense_id' => $expense->id]);
+            }
 
             return $expense;
         }, 3);

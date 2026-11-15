@@ -4,15 +4,18 @@ namespace App\Livewire;
 
 use App\Models\CreditCardInvoice;
 use App\Models\FinancialAccount;
+use App\Models\PaymentPostponement;
 use App\Models\RecurringBill;
 use App\Models\ScheduledBill;
 use App\Services\PayCreditCardInvoice;
 use App\Services\PayRecurringMonthlyBill;
 use App\Services\PayScheduledBill;
+use App\Services\PostponePayment;
 use App\Support\FinancialBalance;
 use App\Support\PaymentAgenda;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Component;
@@ -24,6 +27,10 @@ class Payments extends Component
     public string $selectedPayableKey = '';
     public string $paymentAccountId = '';
     public string $paymentAmount = 'R$ 0,00';
+    public string $billTotalAmount = 'R$ 0,00';
+    public bool $postponeOpen = false;
+    public string $selectedPostponeKey = '';
+    public string $postponeReason = '';
     public string $paidOn = '';
 
     public function mount(): void
@@ -46,12 +53,14 @@ class Payments extends Component
         if (preg_match('/^\d{4}-(?:0[1-9]|1[0-2])$/D', $month)) {
             $this->selectedMonth = $month;
             $this->closePayment();
+            $this->closePostpone();
         }
     }
 
     public function updatedSelectedMonth(): void
     {
         $this->closePayment();
+        $this->closePostpone();
     }
 
     private function selectedEntry(): ?array
@@ -75,6 +84,9 @@ class Payments extends Component
         $this->resetValidation();
         $this->selectedPayableKey = $key;
         $this->paymentAmount = 'R$ '.FinancialBalance::formatted($row['amount_cents']);
+        $this->billTotalAmount = 'R$ '.FinancialBalance::formatted(
+            $row['amount_cents'] + ($row['paid_cents'] ?? 0)
+        );
         $this->paidOn = now()->toDateString();
 
         $accounts = $this->agenda()['accounts']->where('active', true);
@@ -89,6 +101,75 @@ class Payments extends Component
         $this->paymentOpen = false;
         $this->selectedPayableKey = '';
         $this->resetValidation();
+    }
+
+    public function openPostpone(string $key): void
+    {
+        $row = $this->agenda()['pending']->first(fn ($item) => $item['key'] === $key);
+        if ($row === null) {
+            abort(404);
+        }
+
+        $this->closePayment();
+        $this->resetValidation();
+        $this->selectedPostponeKey = $key;
+        $this->postponeReason = '';
+        $this->postponeOpen = true;
+    }
+
+    public function closePostpone(): void
+    {
+        $this->postponeOpen = false;
+        $this->selectedPostponeKey = '';
+        $this->postponeReason = '';
+        $this->resetValidation();
+    }
+
+    public function confirmPostpone(): void
+    {
+        if (! $this->postponeOpen || $this->selectedPostponeKey === '') {
+            return;
+        }
+
+        $this->validate(['postponeReason' => ['nullable', 'string', 'max:500']]);
+        try {
+            app(PostponePayment::class)->execute(
+                (int) Auth::id(), $this->selectedPostponeKey,
+                $this->selectedMonth, 'manual', $this->postponeReason
+            );
+        } catch (ValidationException $exception) {
+            foreach ($exception->errors() as $messages) {
+                $this->addError('postponeReason', implode(' ', $messages));
+            }
+            return;
+        }
+
+        $nextMonth = CarbonImmutable::parse($this->selectedMonth.'-01')->addMonth()->format('m/Y');
+        $this->closePostpone();
+        session()->flash('success', 'Não pagamento registrado. A pendência foi levada para '.$nextMonth.'.');
+    }
+
+    public function undoPostpone(int $eventId): void
+    {
+        $event = PaymentPostponement::query()
+            ->where('user_id', Auth::id())
+            ->where('source', 'manual')
+            ->whereDate('from_month', $this->selectedMonth.'-01')
+            ->findOrFail($eventId);
+
+        $hasLater = PaymentPostponement::query()
+            ->where('user_id', Auth::id())
+            ->where('payable_key', $event->payable_key)
+            ->whereDate('from_month', '>', $event->from_month->toDateString())
+            ->exists();
+
+        if ($hasLater) {
+            $this->addError('postponeReason', 'Há uma decisão posterior para este compromisso.');
+            return;
+        }
+
+        $event->delete();
+        session()->flash('success', 'Adiamento desfeito. A pendência voltou para o mês original.');
     }
 
     private function moneyCents(string $text): int
@@ -122,6 +203,7 @@ class Payments extends Component
                     ->where('user_id', Auth::id())->where('active', true),
             ],
             'paymentAmount' => ['required', 'string'],
+            'billTotalAmount' => ['required', 'string'],
             'paidOn' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
         ], [
             'paymentAccountId.required' => 'Selecione a conta pagadora.',
@@ -138,33 +220,43 @@ class Payments extends Component
         $userId = (int) Auth::id();
         $accountId = (int) $data['paymentAccountId'];
 
-        if ($row['kind'] !== 'recurring' && $cents > $row['amount_cents']) {
-            $this->addError('paymentAmount', 'O valor não pode ultrapassar o compromisso em aberto.');
+        $totalCents = $row['kind'] === 'recurring'
+            ? $this->moneyCents($data['billTotalAmount'])
+            : $row['amount_cents'] + ($row['paid_cents'] ?? 0);
+        $availableForThisBill = $totalCents - ($row['paid_cents'] ?? 0);
+
+        if ($availableForThisBill <= 0 || $cents > $availableForThisBill) {
+            $this->addError('paymentAmount', 'O valor ultrapassa o saldo em aberto do compromisso.');
             return;
         }
 
-        if ($row['kind'] === 'bill' && $cents !== $row['amount_cents']) {
-            $this->addError('paymentAmount', 'Este compromisso tem valor fixo. Corrija-o em Contas mensais antes de pagar.');
-            return;
-        }
-
-        // A verificação definitiva de saldo e de duplicidade também ocorre
-        // nos serviços, dentro de transações com bloqueio das contas.
+        // A saída financeira e o adiamento do saldo parcial precisam
+        // acontecer na MESMA transação para não gerar pagamento sem
+        // agendamento caso uma das operações falhe.
+        $remaining = $availableForThisBill - $cents;
         try {
-            if ($row['kind'] === 'recurring') {
-                app(PayRecurringMonthlyBill::class)->execute(
-                    $userId, (int) $row['id'], (string) $row['period'],
-                    $cents, $accountId, $data['paidOn']
-                );
-            } elseif ($row['kind'] === 'bill') {
-                app(PayScheduledBill::class)->execute(
-                    $userId, (int) $row['id'], $accountId, $data['paidOn']
-                );
-            } else {
-                app(PayCreditCardInvoice::class)->execute(
-                    $userId, (int) $row['id'], $accountId, $cents, $data['paidOn']
-                );
-            }
+            DB::transaction(function () use ($row, $userId, $accountId, $data, $cents, $totalCents, $remaining): void {
+                if ($row['kind'] === 'recurring') {
+                    app(PayRecurringMonthlyBill::class)->execute(
+                        $userId, (int) $row['id'], (string) $row['period'],
+                        $totalCents, $accountId, $data['paidOn'], $cents
+                    );
+                } elseif ($row['kind'] === 'bill') {
+                    app(PayScheduledBill::class)->execute(
+                        $userId, (int) $row['id'], $accountId, $data['paidOn'], $cents
+                    );
+                } else {
+                    app(PayCreditCardInvoice::class)->execute(
+                        $userId, (int) $row['id'], $accountId, $cents, $data['paidOn']
+                    );
+                }
+
+                if ($remaining > 0) {
+                    app(PostponePayment::class)->execute(
+                        $userId, $row['key'], $this->selectedMonth, 'partial'
+                    );
+                }
+            }, 3);
         } catch (ValidationException $exception) {
             foreach ($exception->errors() as $messages) {
                 $this->addError('paymentAmount', implode(' ', $messages));
@@ -173,17 +265,24 @@ class Payments extends Component
         }
 
         $this->closePayment();
-        session()->flash('success', 'Pagamento registrado. O saldo da conta foi atualizado e a pendência recalculada.');
+        session()->flash('success', $remaining > 0
+            ? 'Pagamento parcial registrado. R$ '.FinancialBalance::formatted($remaining)
+                .' seguem para o próximo mês.'
+            : 'Pagamento confirmado. O saldo da conta foi atualizado.');
     }
 
     public function render()
     {
         $agenda = $this->agenda();
         $selectedRow = $this->paymentOpen ? $this->selectedEntry() : null;
+        $postponeRow = $this->postponeOpen
+            ? $agenda['pending']->first(fn ($row) => $row['key'] === $this->selectedPostponeKey)
+            : null;
 
         return view('livewire.payments', [
             'agenda' => $agenda,
             'selectedRow' => $selectedRow,
+            'postponeRow' => $postponeRow,
         ])->layout('layouts.app');
     }
 }

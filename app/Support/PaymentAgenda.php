@@ -7,6 +7,7 @@ use App\Models\CreditCard;
 use App\Models\CreditCardInvoicePayment;
 use App\Models\DailyExpense;
 use App\Models\FinancialAccount;
+use App\Models\PaymentPostponement;
 use App\Models\ReceivedIncome;
 use App\Models\RecurringBill;
 use App\Models\ScheduledBill;
@@ -51,7 +52,7 @@ class PaymentAgenda
         $occurrences = ScheduledBill::query()->where('user_id', $userId)
             ->whereNotNull('recurring_bill_id')
             ->whereDate('period_month', '<=', $from)
-            ->with('payment')
+            ->with(['payment', 'partialPayments.expense'])
             ->get()
             ->keyBy(fn ($bill) => $bill->recurring_bill_id.'|'.$bill->period_month->format('Y-m'));
 
@@ -70,17 +71,24 @@ class PaymentAgenda
                     $due = $bill?->due_on
                         ? CarbonImmutable::parse($bill->due_on->toDateString())
                         : $cursor->addDays(min($plan->due_day, $cursor->daysInMonth) - 1);
-                    $rows->push([
-                        'key' => 'recurring:'.$plan->id.':'.$period,
-                        'kind' => 'recurring',
-                        'id' => $plan->id,
-                        'period' => $period,
-                        'description' => $bill?->description ?? $plan->description,
-                        'detail' => 'Conta mensal · '.substr($period, 5, 2).'/'.substr($period, 0, 4),
-                        'due_on' => $due,
-                        'amount_cents' => FinancialBalance::cents($bill?->amount ?? $plan->planned_amount),
-                        'status' => $due->lessThan($today) ? 'Vencida' : 'A vencer',
-                    ]);
+                    $remaining = $bill?->remainingCents()
+                        ?? FinancialBalance::cents($plan->planned_amount);
+                    $paid = $bill?->receivedCents() ?? 0;
+
+                    if ($remaining > 0) {
+                        $rows->push([
+                            'key' => 'recurring:'.$plan->id.':'.$period,
+                            'kind' => 'recurring',
+                            'id' => $plan->id,
+                            'period' => $period,
+                            'description' => $bill?->description ?? $plan->description,
+                            'detail' => 'Conta mensal · '.substr($period, 5, 2).'/'.substr($period, 0, 4),
+                            'due_on' => $due,
+                            'amount_cents' => $remaining,
+                            'paid_cents' => $paid,
+                            'status' => $due->lessThan($today) ? 'Vencida' : ($paid > 0 ? 'Parcial' : 'A vencer'),
+                        ]);
+                    }
                 }
 
                 $cursor = $cursor->addMonth();
@@ -94,36 +102,46 @@ class PaymentAgenda
                 continue;
             }
             $due = CarbonImmutable::parse($bill->due_on->toDateString());
-            $rows->push([
-                'key' => 'bill:'.$bill->id,
-                'kind' => 'bill',
-                'id' => $bill->id,
-                'period' => null,
-                'description' => $bill->description,
-                'detail' => 'Conta mensal registrada',
-                'due_on' => $due,
-                'amount_cents' => FinancialBalance::cents($bill->amount),
-                'status' => $due->lessThan($today) ? 'Vencida' : 'A vencer',
-            ]);
+            $remaining = $bill->remainingCents();
+            if ($remaining > 0) {
+                $paid = $bill->receivedCents();
+                $rows->push([
+                    'key' => 'bill:'.$bill->id,
+                    'kind' => 'bill',
+                    'id' => $bill->id,
+                    'period' => null,
+                    'description' => $bill->description,
+                    'detail' => 'Conta mensal registrada',
+                    'due_on' => $due,
+                    'amount_cents' => $remaining,
+                    'paid_cents' => $paid,
+                    'status' => $due->lessThan($today) ? 'Vencida' : ($paid > 0 ? 'Parcial' : 'A vencer'),
+                ]);
+            }
         }
 
         $singleBills = ScheduledBill::query()->where('user_id', $userId)
             ->whereNull('recurring_bill_id')->whereNull('daily_expense_id')
-            ->whereDate('due_on', '<=', $to)->get();
+            ->whereDate('due_on', '<=', $to)->with('partialPayments.expense')->get();
 
         foreach ($singleBills as $bill) {
             $due = CarbonImmutable::parse($bill->due_on->toDateString());
-            $rows->push([
-                'key' => 'bill:'.$bill->id,
-                'kind' => 'bill',
-                'id' => $bill->id,
-                'period' => null,
-                'description' => $bill->description,
-                'detail' => 'Conta cadastrada',
-                'due_on' => $due,
-                'amount_cents' => FinancialBalance::cents($bill->amount),
-                'status' => $due->lessThan($today) ? 'Vencida' : 'A vencer',
-            ]);
+            $remaining = $bill->remainingCents();
+            if ($remaining > 0) {
+                $paid = $bill->receivedCents();
+                $rows->push([
+                    'key' => 'bill:'.$bill->id,
+                    'kind' => 'bill',
+                    'id' => $bill->id,
+                    'period' => null,
+                    'description' => $bill->description,
+                    'detail' => 'Conta cadastrada',
+                    'due_on' => $due,
+                    'amount_cents' => $remaining,
+                    'paid_cents' => $paid,
+                    'status' => $due->lessThan($today) ? 'Vencida' : ($paid > 0 ? 'Parcial' : 'A vencer'),
+                ]);
+            }
         }
 
         $nextCardDue = null;
@@ -159,10 +177,30 @@ class PaymentAgenda
                     'detail' => 'Fatura · '.$invoice->installments->count().' parcela(s)',
                     'due_on' => $due,
                     'amount_cents' => $amountCents,
+                    'paid_cents' => max(0, $ownCents - $amountCents),
                     'status' => $due->lessThan($today) ? 'Vencida' : 'A vencer',
                 ]);
             }
         }
+
+        // A dívida permanece com o vencimento original; apenas sua
+        // apresentação é adiada ao mês seguinte após a decisão do usuário
+        // ou após um pagamento parcial. Nenhum débito é criado.
+        $postponements = PaymentPostponement::query()
+            ->where('user_id', $userId)
+            ->whereDate('from_month', '<=', $from)
+            ->orderBy('from_month')
+            ->get();
+
+        $showFrom = $postponements->groupBy('payable_key')->map(
+            fn ($events) => $events->max(fn ($event) => $event->to_month->format('Y-m'))
+        );
+        $rows = $rows->filter(fn ($row) =>
+            ! $showFrom->has($row['key']) || $showFrom->get($row['key']) <= $yearMonth
+        );
+        $postponedThisMonth = $postponements->filter(fn ($event) =>
+            $event->from_month->format('Y-m') === $yearMonth
+        )->values();
 
         $rows = $rows->sortBy(fn ($row) =>
             $row['due_on']->format('Y-m-d').'|'.$row['description'].'|'.$row['key']
@@ -183,6 +221,7 @@ class PaymentAgenda
             'income_cents' => $incomeCents,
             'paid_cents' => $spendingCents + $cardPaidCents,
             'pending' => $rows,
+            'postponed_this_month' => $postponedThisMonth,
             'pending_cents' => $rows->sum('amount_cents'),
             'overdue_cents' => $rows->where('status', 'Vencida')->sum('amount_cents'),
             'next_card_due' => $nextCardDue,
