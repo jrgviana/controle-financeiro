@@ -48,10 +48,18 @@
             <p class="mt-3 text-sm leading-6 text-slate-600">Administre cartões, consulte faturas, registre pagamentos e juros manuais.</p>
             <a href="{{ route('cartoes.index') }}" class="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Gerenciar cartões</a>
         </section>
+                <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div class="flex items-center justify-between gap-3">
+                <h2 class="text-lg font-semibold">Pagamentos</h2>
+                <span class="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">Central</span>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600">Veja saldos disponíveis, contas pendentes e vencidas, e registre pagamentos.</p>
+            <a href="{{ route('pagamentos.index') }}" class="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Abrir pagamentos</a>
+        </section>
     </div>
 
     <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
         <h2 class="font-semibold">Próximos módulos</h2>
-        <p class="mt-2 text-sm leading-6 text-slate-500">Transferências e saques ficam em Contas. Despesas mensais recorrentes ficam em Contas mensais; pagamentos de faturas e antecipações ficam no modal de Cartões. Crediários serão a próxima etapa.</p>
+        <p class="mt-2 text-sm leading-6 text-slate-500">Transferências e saques ficam em Contas. Despesas recorrentes ficam em Contas mensais; os pagamentos e as pendências vencidas ficam em Pagamentos. As antecipações de parcelas são programadas em Cartões. Crediários serão a próxima etapa.</p>
     </section>
 @endsection
