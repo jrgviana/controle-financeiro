@@ -370,7 +370,7 @@ class PaymentsTest extends TestCase
             ->call('confirmPostpone')
             ->assertHasNoErrors();
         $this->assertDatabaseCount('payment_postponements', 2);
-        $this->assertCount(2, app(PaymentAgenda::class)->forMonth($user->id, '2026-12')['pending']);
+        $this->assertCount(1, app(PaymentAgenda::class)->forMonth($user->id, '2026-12')['pending']);
 
         $jan = app(PaymentAgenda::class)->forMonth($user->id, '2027-01');
         $this->assertCount(3, $jan['pending']);

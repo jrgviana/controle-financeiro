@@ -81,7 +81,7 @@
                             <p class="mt-1 text-xs text-slate-500">{{ $entry['detail'] }}</p>
                             @if (($entry['paid_cents'] ?? 0) > 0)
                                 <p class="mt-1 text-xs text-slate-500">
-                                    Já pago: R$ {{ AppSupportFinancialBalance::formatted($entry['paid_cents']) }}
+                                    Já pago: R$ {{ \App\Support\FinancialBalance::formatted($entry['paid_cents']) }}
                                 </p>
                             @endif
                         </div>
