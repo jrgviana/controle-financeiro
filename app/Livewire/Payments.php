@@ -15,6 +15,7 @@ use App\Support\FinancialBalance;
 use App\Support\PaymentAgenda;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Component;
@@ -229,37 +230,38 @@ class Payments extends Component
             return;
         }
 
-        // A verificação definitiva de saldo e de duplicidade também ocorre
-        // nos serviços, dentro de transações com bloqueio das contas.
+        // A saída financeira e o adiamento do saldo parcial precisam
+        // acontecer na MESMA transação para não gerar pagamento sem
+        // agendamento caso uma das operações falhe.
+        $remaining = $availableForThisBill - $cents;
         try {
-            if ($row['kind'] === 'recurring') {
-                app(PayRecurringMonthlyBill::class)->execute(
-                    $userId, (int) $row['id'], (string) $row['period'],
-                    $totalCents, $accountId, $data['paidOn'], $cents
-                );
-            } elseif ($row['kind'] === 'bill') {
-                app(PayScheduledBill::class)->execute(
-                    $userId, (int) $row['id'], $accountId, $data['paidOn'], $cents
-                );
-            } else {
-                app(PayCreditCardInvoice::class)->execute(
-                    $userId, (int) $row['id'], $accountId, $cents, $data['paidOn']
-                );
-            }
+            DB::transaction(function () use ($row, $userId, $accountId, $data, $cents, $totalCents, $remaining): void {
+                if ($row['kind'] === 'recurring') {
+                    app(PayRecurringMonthlyBill::class)->execute(
+                        $userId, (int) $row['id'], (string) $row['period'],
+                        $totalCents, $accountId, $data['paidOn'], $cents
+                    );
+                } elseif ($row['kind'] === 'bill') {
+                    app(PayScheduledBill::class)->execute(
+                        $userId, (int) $row['id'], $accountId, $data['paidOn'], $cents
+                    );
+                } else {
+                    app(PayCreditCardInvoice::class)->execute(
+                        $userId, (int) $row['id'], $accountId, $cents, $data['paidOn']
+                    );
+                }
+
+                if ($remaining > 0) {
+                    app(PostponePayment::class)->execute(
+                        $userId, $row['key'], $this->selectedMonth, 'partial'
+                    );
+                }
+            }, 3);
         } catch (ValidationException $exception) {
             foreach ($exception->errors() as $messages) {
                 $this->addError('paymentAmount', implode(' ', $messages));
             }
             return;
-        }
-
-        $remaining = $availableForThisBill - $cents;
-        if ($remaining > 0) {
-            // O pagamento real já foi gravado. O restante é apresentado
-            // somente a partir do mês seguinte, sem criar nova despesa.
-            app(PostponePayment::class)->execute(
-                $userId, $row['key'], $this->selectedMonth, 'partial'
-            );
         }
 
         $this->closePayment();
