@@ -8,7 +8,7 @@ use App\Models\CreditCardInvoice;
 use App\Models\CreditCardInvoiceCharge;
 use App\Models\CreditCardInvoicePayment;
 use App\Models\FinancialAccount;
-use App\Services\AdvanceCreditCardInstallments;
+use App\Services\ScheduleCreditCardInstallments;
 use App\Support\CreditCardCycle;
 use App\Support\CreditCardLedger;
 use App\Support\FinancialBalance;
@@ -35,8 +35,7 @@ class CreditCards extends Component
     public string $selectedInvoiceId = '';
     public bool $invoiceModalOpen = false;
     public array $advanceInstallmentIds = [];
-    public string $advanceAccountId = '';
-    public string $advanceOn = '';
+    public string $advanceTargetMonth = '';
 
     public bool $cardFormOpen = false;
     public ?int $editingCardId = null;
@@ -356,14 +355,7 @@ class CreditCards extends Component
     private function resetAdvanceForm(): void
     {
         $this->advanceInstallmentIds = [];
-        $accountId = FinancialAccount::query()
-            ->where('user_id', Auth::id())
-            ->where('active', true)
-            ->orderBy('name')
-            ->value('id');
-
-        $this->advanceAccountId = $accountId !== null ? (string) $accountId : '';
-        $this->advanceOn = now()->toDateString();
+        $this->advanceTargetMonth = now()->format('Y-m');
     }
 
     public function advanceSelectedInstallments(): void
@@ -377,32 +369,39 @@ class CreditCards extends Component
         $data = $this->validate([
             'advanceInstallmentIds' => ['required', 'array', 'min:1'],
             'advanceInstallmentIds.*' => ['required', 'integer', 'distinct'],
-            'advanceAccountId' => [
-                'required', 'integer',
-                Rule::exists('financial_accounts', 'id')->where('user_id', Auth::id())->where('active', true),
-            ],
-            'advanceOn' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'advanceTargetMonth' => ['required', 'date_format:Y-m'],
         ], [
-            'advanceInstallmentIds.required' => 'Selecione ao menos uma parcela para antecipar.',
-            'advanceAccountId.required' => 'Escolha a conta que pagou a antecipação.',
+            'advanceInstallmentIds.required' => 'Marque ao menos uma parcela.',
+            'advanceTargetMonth.required' => 'Escolha o mês para o qual deseja trazer essas parcelas.',
         ]);
 
-        $result = app(AdvanceCreditCardInstallments::class)->execute(
+        $result = app(ScheduleCreditCardInstallments::class)->execute(
             (int) Auth::id(),
             $invoice->id,
             $data['advanceInstallmentIds'],
-            (int) $data['advanceAccountId'],
-            $data['advanceOn']
+            $data['advanceTargetMonth']
         );
 
+        $this->selectedInvoiceId = (string) $result['target_invoice_id'];
         $this->resetValidation();
         $this->resetAdvanceForm();
-        session()->flash(
-            'success',
-            $result['count'].' parcela(s) antecipada(s). R$ '
-                .FinancialBalance::formatted($result['amount_cents'])
-                .' descontados da conta escolhida, sem duplicar a dívida.'
+
+        session()->flash('success',
+            $result['count'].' parcela(s) programada(s) para '
+            .$result['target_month'].'. Confira em Contas fixas. Nenhum valor foi descontado do banco.'
         );
+    }
+
+    public function undoPlannedInstallment(int $installmentId): void
+    {
+        if (! $this->invoiceModalOpen) {
+            return;
+        }
+
+        app(ScheduleCreditCardInstallments::class)->undo((int) Auth::id(), $installmentId);
+        $this->resetValidation();
+        $this->resetAdvanceForm();
+        session()->flash('success', 'Antecipação programada desfeita. A parcela voltou ao vencimento original.');
     }
 
     private function resetPaymentForm(): void
@@ -518,7 +517,10 @@ class CreditCards extends Component
             ->get();
 
         $card = $cards->firstWhere('id', (int) $this->selectedCardId) ?? $cards->first();
-        $invoices = $card ? $ledger->invoices($card) : collect();
+        $invoices = $card ? $ledger->invoices($card)->filter(fn ($row) =>
+            $row['installments_cents'] > 0 || $row['interest_cents'] > 0
+            || $row['paid_cents'] > 0 || $row['carry_cents'] > 0
+        )->values() : collect();
 
         $selected = $invoices->first(
             fn ($row) => $row['invoice']->id === (int) $this->selectedInvoiceId
@@ -527,10 +529,13 @@ class CreditCards extends Component
 
         $advanceSelectable = $selected !== null
             && $selected['invoice']->due_on->startOfDay()->isFuture()
-            && $selected['remaining_cents'] > 0;
+            && $selected['remaining_cents'] > 0
+            && $selected['invoice']->payments->isEmpty();
 
         $advanceOptions = $advanceSelectable
-            ? $selected['invoice']->installments->filter(fn ($row) => $row->advance === null)
+            ? $selected['invoice']->installments->filter(fn ($row) =>
+                $row->advance === null && $row->scheduledPlan === null
+            )
             : collect();
 
         $selectedAdvanceIds = array_map('intval', $this->advanceInstallmentIds);

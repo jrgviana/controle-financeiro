@@ -4,6 +4,8 @@ namespace App\Livewire;
 
 use App\Models\FinancialAccount;
 use App\Models\CreditCard;
+use App\Models\CreditCardInvoice;
+use App\Services\PayCreditCardInvoice;
 use App\Support\CreditCardLedger;
 use App\Models\RecurringBill;
 use App\Models\ScheduledBill;
@@ -45,6 +47,11 @@ class FixedBills extends Component
     public ?int $billToPayId = null;
     public string $billPaymentAccountId = '';
     public string $billPaidOn = '';
+    public bool $cardPaymentOpen = false;
+    public ?int $cardInvoiceToPayId = null;
+    public string $cardPayAccountId = '';
+    public string $cardPayAmount = 'R$ 0,00';
+    public string $cardPayDate = '';
 
     public function mount(): void
     {
@@ -386,6 +393,78 @@ class FixedBills extends Component
         session()->flash('success', 'Pagamento registrado uma única vez em Gastos e descontado do saldo da conta escolhida.');
     }
 
+    public function jumpToCardMonth(string $month): void
+    {
+        if (preg_match('/^\d{4}-(?:0[1-9]|1[0-2])$/D', $month)) {
+            $this->selectedMonth = $month;
+        }
+    }
+
+    public function openCardPayment(int $invoiceId): void
+    {
+        $invoice = CreditCardInvoice::query()
+            ->where('user_id', Auth::id())
+            ->whereHas('card', fn ($query) => $query->where('user_id', Auth::id()))
+            ->findOrFail($invoiceId);
+        $card = CreditCard::query()->where('user_id', Auth::id())->findOrFail($invoice->credit_card_id);
+        $row = app(CreditCardLedger::class)->invoices($card)
+            ->first(fn ($entry) => $entry['invoice']->id === $invoice->id);
+
+        if ($row === null || $row['remaining_cents'] <= 0) {
+            throw ValidationException::withMessages([
+                'cardPayAmount' => 'Esta fatura já está quitada.',
+            ]);
+        }
+
+        $this->resetValidation();
+        $this->cardInvoiceToPayId = $invoice->id;
+        $account = FinancialAccount::query()->where('user_id', Auth::id())
+            ->where('active', true)->orderBy('name')->first();
+        $this->cardPayAccountId = $account ? (string) $account->id : '';
+        $this->cardPayAmount = 'R$ '.FinancialBalance::formatted($row['remaining_cents']);
+        $this->cardPayDate = now()->toDateString();
+        $this->cardPaymentOpen = true;
+    }
+
+    public function closeCardPayment(): void
+    {
+        $this->cardPaymentOpen = false;
+        $this->cardInvoiceToPayId = null;
+        $this->resetValidation();
+    }
+
+    public function confirmCardPayment(): void
+    {
+        if (! $this->cardPaymentOpen || $this->cardInvoiceToPayId === null) {
+            return;
+        }
+
+        $data = $this->validate([
+            'cardPayAccountId' => [
+                'required', 'integer',
+                Rule::exists('financial_accounts', 'id')->where('user_id', Auth::id())->where('active', true),
+            ],
+            'cardPayAmount' => ['required', 'string'],
+            'cardPayDate' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+        ]);
+
+        $amountCents = $this->moneyCents($data['cardPayAmount'], 'cardPayAmount');
+        $result = app(PayCreditCardInvoice::class)->execute(
+            (int) Auth::id(),
+            $this->cardInvoiceToPayId,
+            (int) $data['cardPayAccountId'],
+            $amountCents,
+            $data['cardPayDate'],
+        );
+
+        $this->closeCardPayment();
+        session()->flash('success',
+            $result['remaining_cents'] > 0
+                ? 'Pagamento parcial registrado. O saldo restante permanece em aberto; juros podem ser lançados em Cartões.'
+                : 'Fatura quitada. Valor descontado uma única vez da conta escolhida.'
+        );
+    }
+
     public function render()
     {
         $month = $this->month();
@@ -434,43 +513,62 @@ class FixedBills extends Component
             + $oneOff->filter(fn ($b) => $b->daily_expense_id !== null)
                 ->sum(fn ($b) => FinancialBalance::cents($b->amount));
 
-        // Utilize sempre o vencimento REAL da parcela gravado na fatura
-        // pela lógica de fechamento/melhor dia de compra do cartão.
-        // Não projetar o total da compra para o mês do lançamento.
-        $cardInstallments = collect();
+        // As compras sempre entram no mês do vencimento REAL registrado no
+        // fechamento do cartão, e nunca no mês da compra por aproximação.
+        $cardInvoices = collect();
+        $nextCardMonth = null;
+        $nextCardMonthCents = 0;
         $ledger = app(CreditCardLedger::class);
+
         foreach (CreditCard::query()->where('user_id', Auth::id())->get() as $card) {
-            foreach ($ledger->invoices($card) as $invoiceRow) {
-                $invoice = $invoiceRow['invoice'];
-                if ($invoice->due_on->format('Y-m') !== $month->format('Y-m')) {
+            foreach ($ledger->invoices($card) as $row) {
+                $invoice = $row['invoice'];
+                $invoiceMonth = $invoice->due_on->format('Y-m');
+
+                if ($row['installments_cents'] === 0 && $row['interest_cents'] === 0
+                    && $row['paid_cents'] === 0 && $row['carry_cents'] === 0) {
                     continue;
                 }
 
-                foreach ($invoice->installments as $installment) {
-                    $cardInstallments->push([
-                        'card' => $card,
+                if ($invoiceMonth === $month->format('Y-m')) {
+                    $plannedAdvances = $invoice->installments
+                        ->filter(fn ($item) => $item->scheduledPlan !== null)
+                        ->sum(fn ($item) => FinancialBalance::cents($item->amount));
+
+                    $cardInvoices->push([
                         'invoice' => $invoice,
-                        'installment' => $installment,
-                        'purchase' => $installment->purchase,
-                        'amount_cents' => FinancialBalance::cents($installment->amount),
-                        'advanced' => $installment->advance !== null,
-                        'invoice_paid' => $invoiceRow['remaining_cents'] === 0,
-                        'invoice_partially_paid' => $invoiceRow['paid_cents'] > 0,
+                        'card' => $card,
+                        'row' => $row,
+                        'planned_advance_cents' => $plannedAdvances,
                     ]);
+                    continue;
+                }
+
+                if ($invoiceMonth > $month->format('Y-m') && $row['installments_cents'] > 0) {
+                    if ($nextCardMonth === null || $invoiceMonth < $nextCardMonth) {
+                        $nextCardMonth = $invoiceMonth;
+                        $nextCardMonthCents = $row['installments_cents'];
+                    } elseif ($nextCardMonth === $invoiceMonth) {
+                        $nextCardMonthCents += $row['installments_cents'];
+                    }
                 }
             }
         }
 
-        $cardInstallments = $cardInstallments
-            ->sortBy(fn ($row) => $row['invoice']->due_on->format('Y-m-d')
-                .'|'.$row['card']->name
-                .'|'.str_pad((string) $row['installment']->id, 12, '0', STR_PAD_LEFT))
+        $cardInvoices = $cardInvoices
+            ->sortBy(fn ($item) => $item['invoice']->due_on->format('Y-m-d').'|'.$item['card']->name)
             ->values();
 
-        $cardMonthCents = $cardInstallments->sum(fn ($row) => $row['amount_cents']);
-        $cardAdvancedCents = $cardInstallments
-            ->filter(fn ($row) => $row['advanced'])
-            ->sum(fn ($row) => $row['amount_cents']);
+        $cardMonthCents = $cardInvoices->sum(fn ($item) => $item['row']['installments_cents']);
+        $cardAdvancedCents = $cardInvoices->sum(fn ($item) => $item['planned_advance_cents']);
+        $cardInvoiceRemainingCents = $cardInvoices->sum(fn ($item) => $item['row']['remaining_cents']);
+        $cardInvoicePaidCents = $cardInvoices->sum(fn ($item) => $item['row']['paid_cents']);
+
+        $cardInvoiceToPay = null;
+        if ($this->cardInvoiceToPayId !== null) {
+            $cardInvoiceToPay = $cardInvoices
+                ->first(fn ($item) => $item['invoice']->id === $this->cardInvoiceToPayId);
+        }
 
         $billToPay = $this->billToPayId !== null
             ? ScheduledBill::query()->where('user_id', Auth::id())->find($this->billToPayId)
@@ -482,9 +580,14 @@ class FixedBills extends Component
 
         return view('livewire.fixed-bills', [
             'fixedRows' => $fixedRows,
-            'cardInstallments' => $cardInstallments,
+            'cardInvoices' => $cardInvoices,
             'cardMonthCents' => $cardMonthCents,
             'cardAdvancedCents' => $cardAdvancedCents,
+            'cardInvoiceRemainingCents' => $cardInvoiceRemainingCents,
+            'cardInvoicePaidCents' => $cardInvoicePaidCents,
+            'nextCardMonth' => $nextCardMonth,
+            'nextCardMonthCents' => $nextCardMonthCents,
+            'cardInvoiceToPay' => $cardInvoiceToPay,
             'totalScheduledCents' => $plannedCents + $cardMonthCents,
             'oneOff' => $oneOff,
             'plannedCents' => $plannedCents,

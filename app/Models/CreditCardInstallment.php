@@ -22,6 +22,11 @@ class CreditCardInstallment extends Model
         return $this->belongsTo(CreditCardPurchase::class, 'credit_card_purchase_id');
     }
 
+    public function scheduledPlan(): HasOne
+    {
+        return $this->hasOne(CreditCardInstallmentPlan::class, 'credit_card_installment_id');
+    }
+
     public function advance(): HasOne
     {
         return $this->hasOne(CreditCardInstallmentAdvance::class, 'credit_card_installment_id');
