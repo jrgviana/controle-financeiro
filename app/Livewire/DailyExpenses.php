@@ -45,6 +45,7 @@ class DailyExpenses extends Component
     public int $installmentsCount = 1;
     public string $filterType = 'all';
     public string $filterCardId = '';
+    public int $historyVersion = 0;
 
     public function mount(): void
     {
@@ -116,6 +117,13 @@ class DailyExpenses extends Component
     public function edit(int $id): void
     {
         $expense = $this->ownedExpense($id);
+
+        if ($expense->scheduledBill()->exists()) {
+            session()->flash('error', 'O pagamento está vinculado a uma conta programada. Consulte Minhas contas.');
+
+            return;
+        }
+
         $this->resetValidation();
         $this->paymentMethod = 'account';
         $this->editingId = $expense->id;
@@ -201,7 +209,10 @@ class DailyExpenses extends Component
         }
 
         $this->selectedMonth = substr($data['paidOn'], 0, 7);
+        $this->filterType = 'all';
         $this->filterAccountId = '';
+        $this->filterCardId = '';
+        $this->historyVersion++;
         $this->resetValidation();
         $this->resetForm();
         $this->resetPage();
@@ -260,9 +271,12 @@ class DailyExpenses extends Component
         );
 
         $this->selectedMonth = substr($data['paidOn'], 0, 7);
-        $this->filterType = 'card';
-        $this->filterCardId = $selectedCardId;
+        // Não restringir a listagem ao último cartão: dois lançamentos
+        // consecutivos em cartões diferentes precisam aparecer imediatamente.
+        $this->filterType = 'all';
+        $this->filterCardId = '';
         $this->filterAccountId = '';
+        $this->historyVersion++;
         $this->resetValidation();
         $this->resetForm();
         $this->cardId = $selectedCardId;
@@ -274,7 +288,16 @@ class DailyExpenses extends Component
 
     public function delete(int $id): void
     {
-        $this->ownedExpense($id)->delete();
+        $expense = $this->ownedExpense($id);
+
+        if ($expense->scheduledBill()->exists()) {
+            session()->flash('error', 'Este pagamento está vinculado a uma conta programada e não pode ser removido em Gastos.');
+
+            return;
+        }
+
+        $expense->delete();
+        $this->historyVersion++;
 
         if ($this->editingId === $id) {
             $this->cancel();
@@ -335,7 +358,7 @@ class DailyExpenses extends Component
         $cardCount = (clone $purchasesQuery)->count();
 
         $paidRows = in_array($this->filterType, ['all', 'account'], true)
-            ? $paidQuery->with('financialAccount:id,name')->get()->map(fn ($expense) => [
+            ? $paidQuery->with(['financialAccount:id,name', 'scheduledBill:id,daily_expense_id'])->get()->map(fn ($expense) => [
                 'id' => $expense->id,
                 'date' => $expense->paid_on,
                 'description' => $expense->description,
@@ -344,6 +367,7 @@ class DailyExpenses extends Component
                 'amount' => $expense->amount,
                 'notes' => $expense->notes,
                 'kind' => 'account',
+                'planned' => $expense->scheduledBill !== null,
                 'model' => $expense,
             ])
             : collect();

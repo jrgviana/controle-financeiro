@@ -32,6 +32,7 @@ class CreditCards extends Component
 
     public string $selectedCardId = '';
     public string $selectedInvoiceId = '';
+    public bool $invoiceModalOpen = false;
 
     public bool $cardFormOpen = false;
     public ?int $editingCardId = null;
@@ -206,10 +207,16 @@ class CreditCards extends Component
         $card = $this->ownedCard($id);
         $this->selectedCardId = (string) $id;
         $this->selectedInvoiceId = $this->preferredInvoiceId($card);
+        $this->invoiceModalOpen = true;
         $this->resetValidation();
         $this->resetPurchaseForm();
         $this->resetInterestForm();
         $this->resetPaymentForm();
+    }
+
+    public function closeInvoices(): void
+    {
+        $this->invoiceModalOpen = false;
     }
 
     public function selectInvoice(int $id): void
@@ -287,6 +294,7 @@ class CreditCards extends Component
         );
 
         $this->selectedInvoiceId = $this->preferredInvoiceId($card);
+        $this->invoiceModalOpen = true;
         $count = (int) $data['installmentsCount'];
         $this->resetValidation();
         $this->resetPurchaseForm();
