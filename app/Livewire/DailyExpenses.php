@@ -160,6 +160,8 @@ class DailyExpenses extends Component
 
         $this->formOpen = false;
         $this->editingId = null;
+        $this->selectedMonth = substr($data['paidOn'], 0, 7);
+        $this->filterAccountId = '';
         $this->resetPage();
     }
 
