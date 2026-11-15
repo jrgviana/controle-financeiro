@@ -563,6 +563,14 @@ class FixedBills extends Component
         $cardAdvancedCents = $cardInvoices->sum(fn ($item) => $item['planned_advance_cents']);
         $cardInvoiceRemainingCents = $cardInvoices->sum(fn ($item) => $item['row']['remaining_cents']);
         $cardInvoicePaidCents = $cardInvoices->sum(fn ($item) => $item['row']['paid_cents']);
+        // O resumo mensal considera o total de cada fatura (incluindo encargos
+        // e eventuais saldos transportados), não apenas parcelas novas.
+        // Pagamentos são detalhados separadamente para não confundir
+        // compromissos previstos com valores ainda a pagar.
+        $cardInvoiceTotalCents = $cardInvoices->sum(fn ($item) => $item['row']['total_cents']);
+        $totalScheduledCents = $plannedCents + $cardInvoiceTotalCents;
+        $totalPaidCents = $paidCents + $cardInvoicePaidCents;
+        $totalPendingCents = max(0, $plannedCents - $paidCents) + $cardInvoiceRemainingCents;
 
         $cardInvoiceToPay = null;
         if ($this->cardInvoiceToPayId !== null) {
@@ -585,10 +593,13 @@ class FixedBills extends Component
             'cardAdvancedCents' => $cardAdvancedCents,
             'cardInvoiceRemainingCents' => $cardInvoiceRemainingCents,
             'cardInvoicePaidCents' => $cardInvoicePaidCents,
+            'cardInvoiceTotalCents' => $cardInvoiceTotalCents,
+            'totalPaidCents' => $totalPaidCents,
+            'totalPendingCents' => $totalPendingCents,
             'nextCardMonth' => $nextCardMonth,
             'nextCardMonthCents' => $nextCardMonthCents,
             'cardInvoiceToPay' => $cardInvoiceToPay,
-            'totalScheduledCents' => $plannedCents + $cardMonthCents,
+            'totalScheduledCents' => $totalScheduledCents,
             'oneOff' => $oneOff,
             'plannedCents' => $plannedCents,
             'paidCents' => $paidCents,
