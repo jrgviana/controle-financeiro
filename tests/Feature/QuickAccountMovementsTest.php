@@ -81,7 +81,8 @@ class QuickAccountMovementsTest extends TestCase
             ->assertSet('transferModalOpen', true)
             ->assertSet('transferSourceId', $itau->id)
             ->assertSee('Movimentar saldo')
-            ->assertSee('Disponível: R
+            ->assertSee('Disponível: R$')
+            ->assertSee('200,00');
     }
 
     public function test_regular_transfer_moves_only_money_left_after_paid_expenses(): void
