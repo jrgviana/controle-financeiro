@@ -65,7 +65,7 @@ class FixedBillsTest extends TestCase
 
         $user = User::factory()->create();
         $this->actingAs($user)->get('/contas-fixas')
-            ->assertOk()->assertSee('Contas fixas')->assertSee('Nova conta fixa');
+            ->assertOk()->assertSee('Contas fixas')->assertSee('Cadastrar conta mensal');
 
         $this->actingAs($user)->get('/contas')
             ->assertOk()->assertSee('Saldo disponível calculado')
