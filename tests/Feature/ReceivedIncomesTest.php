@@ -170,10 +170,11 @@ class ReceivedIncomesTest extends TestCase
     {
         $owner = User::factory()->create();
         $viewer = User::factory()->create();
-        $this->income($owner, $this->account($owner));
+        $income = $this->income($owner, $this->account($owner));
+        $income->update(['description' => 'Salário oculto']);
 
         Livewire::actingAs($viewer)->test(ReceivedIncomes::class)
-            ->assertDontSee('Salário')
+            ->assertDontSee('Salário oculto')
             ->assertSee('Nenhum recebimento neste período');
     }
 
