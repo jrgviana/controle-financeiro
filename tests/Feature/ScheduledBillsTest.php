@@ -288,7 +288,7 @@ class ScheduledBillsTest extends TestCase
         Livewire::actingAs($user)->test(CreditCards::class)
             ->call('selectCard', $card->id)
             ->assertSet('invoiceModalOpen', true)
-            ->assertSee('Faturas e antecipação')
+            ->assertSee('Faturas e planejamento de parcelas')
             ->assertSee('Registrar pagamento da fatura')
             ->call('closeInvoices')
             ->assertSet('invoiceModalOpen', false);

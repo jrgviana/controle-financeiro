@@ -149,7 +149,7 @@ class CardInstallmentAdvanceTest extends TestCase
         $card = $this->card($user);
 
         $this->purchase($user, $card, 'Parcela dezembro', 'R$ 100,00', '2026-11-14', 1);
-        $this->purchase($user, $card, 'Parcelado janeiro', 'R$ 200,00', '2026-11-14', 2);
+        $this->purchase($user, $card, 'Parcelado janeiro', 'R$ 300,00', '2026-11-14', 3);
         $invoices = $card->invoices()->orderBy('due_on')->get();
         $dec = $invoices[0];
         $jan = $invoices[1];
@@ -161,11 +161,11 @@ class CardInstallmentAdvanceTest extends TestCase
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-12')
-            ->assertSee('R$ 200,00')
+            ->assertSee('R$ 300,00')
             ->assertSee('Antecipada para este mês')
             ->call('openCardPayment', $dec->id)
             ->assertSet('cardPaymentOpen', true)
-            ->assertSet('cardPayAmount', 'R$ 200,00')
+            ->assertSet('cardPayAmount', 'R$ 300,00')
             ->set('cardPayAccountId', (string) $account->id)
             ->set('cardPayDate', '2026-11-15')
             ->call('confirmCardPayment')
@@ -175,13 +175,14 @@ class CardInstallmentAdvanceTest extends TestCase
         $this->assertDatabaseCount('credit_card_invoice_payments', 1);
         $this->assertDatabaseCount('daily_expenses', 0);
         $this->assertDatabaseCount('credit_card_installment_plans', 1);
-        $this->assertSame(280000, (new FinancialBalance())->currentCents($account));
+        $this->assertSame(270000, (new FinancialBalance())->currentCents($account));
         $this->assertSame(10000, (new CreditCardLedger())->totalDebt($card));
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2027-01')
-            ->assertSee('R$ 100,00')
-            ->assertDontSee('R$ 200,00');
+            ->assertDontSee('Parcelado janeiro')
+            ->set('selectedMonth', '2027-02')
+            ->assertSee('R$ 100,00');
     }
 
     public function test_scheduled_installment_can_be_reverted_before_payment(): void
