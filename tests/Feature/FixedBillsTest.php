@@ -97,6 +97,64 @@ class FixedBillsTest extends TestCase
         $this->assertSame(100000, (new FinancialBalance())->currentCents($bank));
     }
 
+    public function test_summary_separates_monthly_accounts_card_invoices_and_their_combined_total(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
+        $user = User::factory()->create();
+        $bank = $this->bank($user);
+        $this->createFixed($user, 'Internet residencial', 'R$ 120,00', 10);
+
+        $card = \App\Models\CreditCard::create([
+            'user_id' => $user->id,
+            'name' => 'Cartão Hiper',
+            'closing_day' => 9,
+            'due_day' => 15,
+            'active' => true,
+        ]);
+
+        Livewire::actingAs($user)->test(\App\Livewire\DailyExpenses::class)
+            ->set('paymentMethod', 'card')
+            ->set('cardId', (string) $card->id)
+            ->set('description', 'Bomba hidráulica')
+            ->set('amount', 'R$ 125,00')
+            ->set('installmentsCount', 1)
+            ->set('paidOn', '2026-11-14')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $invoice = $card->invoices()->firstOrFail();
+
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2026-12')
+            ->assertSee('Contas fixas e avulsas do mês')
+            ->assertSee('Faturas dos cartões do mês')
+            ->assertSee('Total de compromissos do mês')
+            ->assertSee('R$ 120,00')
+            ->assertSee('R$ 125,00')
+            ->assertSee('R$ 245,00')
+            ->assertSee('Bomba hidráulica')
+            ->assertSee('Parcela 1/1')
+            ->assertDontSee('Ver parcelas que compõem esta fatura')
+            ->assertDontSee('<details class="mt-3 rounded-lg bg-slate-50', false);
+
+        // Um pagamento parcial não reduz a previsão original do mês:
+        // apenas muda o que já foi pago e o que ainda resta pagar.
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2026-12')
+            ->call('openCardPayment', $invoice->id)
+            ->set('cardPayAccountId', (string) $bank->id)
+            ->set('cardPayAmount', 'R$ 50,00')
+            ->set('cardPayDate', '2026-11-15')
+            ->call('confirmCardPayment')
+            ->assertHasNoErrors()
+            ->assertSee('R$ 245,00')
+            ->assertSee('R$ 50,00')
+            ->assertSee('R$ 75,00')
+            ->assertSee('R$ 195,00');
+
+        $this->assertSame(95000, (new FinancialBalance())->currentCents($bank));
+    }
+
     public function test_short_months_adjust_due_day_without_changing_saved_default(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
