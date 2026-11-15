@@ -123,41 +123,14 @@ class AccountTransfers extends Component
         $fromId = (int) $data['fromAccountId'];
         $toId = (int) $data['toAccountId'];
 
-        DB::transaction(function () use ($userId, $fromId, $toId, $data, $cents): void {
-            // Ordenação evita deadlock entre transferências simultâneas e
-            // a checagem acontece novamente no banco, não só na tela.
-            $accounts = FinancialAccount::query()
-                ->where('user_id', $userId)
-                ->where('active', true)
-                ->whereIn('id', [$fromId, $toId])
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get()
-                ->keyBy('id');
-
-            if ($accounts->count() !== 2) {
-                throw ValidationException::withMessages([
-                    'fromAccountId' => 'Uma das contas foi desativada ou não está disponível.',
-                ]);
-            }
-
-            $balance = (new FinancialBalance())->currentCents($accounts->get($fromId));
-
-            if ($balance < $cents) {
-                throw ValidationException::withMessages([
-                    'amount' => 'Saldo insuficiente. Disponível na origem: R$ '.FinancialBalance::formatted(max($balance, 0)).'.',
-                ]);
-            }
-
-            AccountTransfer::create([
-                'user_id' => $userId,
-                'from_account_id' => $fromId,
-                'to_account_id' => $toId,
-                'transferred_on' => $data['transferredOn'],
-                'amount' => number_format($cents / 100, 2, '.', ''),
-                'notes' => trim($data['notes'] ?? '') ?: null,
-            ]);
-        }, 3);
+        app(\App\Services\TransferFunds::class)->execute(
+            $userId,
+            $fromId,
+            $toId,
+            $cents,
+            $data['transferredOn'],
+            trim($data['notes'] ?? '') ?: null,
+        );
 
         $this->selectedMonth = substr($data['transferredOn'], 0, 7);
         $this->filterAccountId = '';
