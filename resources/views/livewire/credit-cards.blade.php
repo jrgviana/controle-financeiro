@@ -279,11 +279,78 @@
                     @endforeach
                 </div>
 
-                <p class="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    A fatura é exibida somente para consulta. Para registrar pagamento total ou parcial e juros,
-                    utilize <a href="{{ route('contas.index') }}" class="font-semibold text-sky-700 underline">Minhas contas</a>,
-                    na seção Compromissos e faturas.
-                </p>
+                <div class="mt-7 grid gap-5 lg:grid-cols-2">
+                    <div class="rounded-xl border border-slate-200 p-4 sm:p-5">
+                        <h3 class="font-semibold">Registrar pagamento da fatura</h3>
+                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                            Permite quitar ou antecipar uma fatura futura, integral ou parcialmente. Apenas o valor efetivamente pago será descontado da conta escolhida.
+                        </p>
+                        @if ($open > 0 && $accounts->isNotEmpty())
+                            <form wire:submit="payInvoice" wire:key="invoice-payment-{{ $current->id }}-{{ $paymentFormVersion }}" class="mt-4 space-y-3">
+                                <div>
+                                    <label for="card-payment-account" class="mb-1 block text-sm font-medium">Conta pagadora</label>
+                                    <select id="card-payment-account" wire:model="paymentAccountId" required
+                                        class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-600">
+                                        <option value="">Selecione uma conta</option>
+                                        @foreach ($accounts as $account)
+                                            <option value="{{ $account->id }}">{{ $account->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('paymentAccountId') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                </div>
+                                <div class="grid gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <label for="card-payment-amount" class="mb-1 block text-sm font-medium">Valor pago</label>
+                                        <input id="card-payment-amount" wire:model="paymentAmount" data-money-mask
+                                            type="text" inputmode="numeric" autocomplete="off" placeholder="R$ 0,00" required
+                                            class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm tabular-nums outline-none focus:border-sky-600">
+                                        @error('paymentAmount') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                    </div>
+                                    <div>
+                                        <label for="card-payment-date" class="mb-1 block text-sm font-medium">Data do pagamento</label>
+                                        <input id="card-payment-date" wire:model="paymentOn" type="date" max="{{ now()->toDateString() }}" required
+                                            class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-sky-600">
+                                        @error('paymentOn') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                    </div>
+                                </div>
+                                <button type="submit" wire:loading.attr="disabled" wire:target="payInvoice"
+                                    class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
+                                    Registrar pagamento
+                                </button>
+                            </form>
+                        @elseif ($open === 0)
+                            <p class="mt-3 text-sm font-semibold text-emerald-700">Fatura quitada. Nenhum valor pendente neste vencimento.</p>
+                        @else
+                            <p class="mt-3 text-sm text-amber-700">Cadastre uma conta financeira ativa para registrar pagamentos.</p>
+                        @endif
+                    </div>
+                    <div class="rounded-xl border border-slate-200 p-4 sm:p-5">
+                        <h3 class="font-semibold">Adicionar juros/encargos manualmente</h3>
+                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                            Informe os juros cobrados pelo banco. Após pagamento parcial, selecione a fatura seguinte; o saldo anterior será incluído na projeção.
+                            O sistema não inventa taxas.
+                        </p>
+                        <form wire:submit="addInterest" wire:key="invoice-interest-{{ $current->id }}-{{ $interestFormVersion }}" class="mt-4 space-y-3">
+                            <div>
+                                <label for="card-interest-description" class="mb-1 block text-sm font-medium">Descrição</label>
+                                <input id="card-interest-description" wire:model="interestDescription" type="text" maxlength="160" required
+                                    class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-sky-600">
+                                @error('interestDescription') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <label for="card-interest-amount" class="mb-1 block text-sm font-medium">Valor dos juros</label>
+                                <input id="card-interest-amount" wire:model="interestAmount" type="text" data-money-mask inputmode="numeric"
+                                    autocomplete="off" required placeholder="R$ 0,00"
+                                    class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm tabular-nums outline-none focus:border-sky-600">
+                                @error('interestAmount') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                            </div>
+                            <button type="submit" wire:loading.attr="disabled" wire:target="addInterest"
+                                class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-100 disabled:opacity-50">
+                                Incluir juros na fatura
+                            </button>
+                        </form>
+                    </div>
+                </div>
 
                 <div class="mt-7">
                     <h3 class="font-semibold">Pagamentos já registrados</h3>
