@@ -185,6 +185,40 @@ class UnifiedSpendingTest extends TestCase
         $this->assertDatabaseCount('credit_card_installments', 0);
     }
 
+    public function test_two_successive_card_purchases_appear_without_leaving_or_refreshing_gastos(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-25 12:00'));
+
+        $user = User::factory()->create();
+        $a = $this->card($user, 'Visa', 10, 15);
+        $b = $this->card($user, 'Mastercard', 7, 13);
+
+        Livewire::actingAs($user)->test(DailyExpenses::class)
+            ->set('paymentMethod', 'card')
+            ->set('cardId', (string) $a->id)
+            ->set('description', 'Primeira compra')
+            ->set('amount', 'R$ 125,00')
+            ->set('paidOn', '2026-11-14')
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSet('filterType', 'all')
+            ->assertSet('filterCardId', '')
+            ->assertSee('Primeira compra')
+            ->set('cardId', (string) $b->id)
+            ->set('description', 'Segunda compra')
+            ->set('amount', 'R$ 50,00')
+            ->set('paidOn', '2026-11-14')
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSet('filterType', 'all')
+            ->assertSet('filterCardId', '')
+            ->assertSee('Primeira compra')
+            ->assertSee('Segunda compra')
+            ->assertSee('R$ 175,00');
+
+        $this->assertDatabaseCount('credit_card_purchases', 2);
+    }
+
     public function test_combined_history_lists_account_and_card_purchases_in_same_month_without_mixing_balances(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-25 12:00'));
