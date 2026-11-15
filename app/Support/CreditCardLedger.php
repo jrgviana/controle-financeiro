@@ -15,7 +15,7 @@ class CreditCardLedger
     public function invoices(CreditCard $card): Collection
     {
         $invoices = $card->invoices()
-            ->with(['installments.purchase', 'installments.advance', 'charges', 'payments.financialAccount'])
+            ->with(['installments.purchase', 'installments.advance', 'charges', 'payments.financialAccount', 'payments.installmentAdvances'])
             ->orderBy('due_on')
             ->get();
 
@@ -29,8 +29,13 @@ class CreditCardLedger
             $total = $opening + $installments + $charges;
             $remaining = max(0, $total - $paid);
 
-            // Não acumular faturas FUTURAS não vencidas como se estivessem em atraso.
-            $carry = ($paid > 0 || $invoice->due_on->isPast()) ? $remaining : 0;
+            // Antecipar uma parcela futura NÃO significa que o restante da fatura
+            // venceu ou que deve ser transferido para o próximo mês.
+            // Pagamento parcial genérico continua projetando saldo, como antes.
+            $hasOrdinaryPayment = $invoice->payments->contains(
+                fn ($payment) => $payment->installmentAdvances->isEmpty()
+            );
+            $carry = ($hasOrdinaryPayment || $invoice->due_on->isPast()) ? $remaining : 0;
 
             return [
                 'invoice' => $invoice,
