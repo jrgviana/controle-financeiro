@@ -6,6 +6,7 @@ use App\Models\DailyExpense;
 use App\Models\CreditCard;
 use App\Models\CreditCardPurchase;
 use App\Services\RecordCreditCardPurchase;
+use App\Support\CreditCardLedger;
 use App\Support\FinancialBalance;
 use App\Models\FinancialAccount;
 use Carbon\Carbon;
@@ -337,6 +338,14 @@ class DailyExpenses extends Component
             ->get();
 
         $activeCards = $cards->where('active', true);
+        $selectedCard = $activeCards->firstWhere('id', (int) $this->cardId);
+        $selectedCardAvailableCents = $selectedCard && $selectedCard->credit_limit !== null
+            ? max(
+                0,
+                FinancialBalance::cents($selectedCard->credit_limit)
+                    - app(CreditCardLedger::class)->totalDebt($selectedCard)
+            )
+            : null;
         $allowedCardIds = $cards->pluck('id')->map(fn ($id) => (string) $id);
         $cardFilterId = $allowedCardIds->contains($this->filterCardId)
             ? (int) $this->filterCardId
@@ -422,6 +431,7 @@ class DailyExpenses extends Component
             'movements' => $movements,
             'cards' => $cards,
             'activeCards' => $activeCards,
+            'selectedCardAvailableCents' => $selectedCardAvailableCents,
             'hasActiveCards' => $activeCards->isNotEmpty(),
             'paidTotal' => FinancialBalance::formatted($paidTotalCents),
             'cardTotal' => FinancialBalance::formatted($cardTotalCents),
