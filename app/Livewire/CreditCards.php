@@ -78,6 +78,18 @@ class CreditCards extends Component
 
         $this->selectedCardId = $first !== null ? (string) $first->id : '';
         $this->selectedInvoiceId = $first !== null ? $this->preferredInvoiceId($first) : '';
+        $linkedInvoice = filter_var(request()->query('fatura'), FILTER_VALIDATE_INT);
+        if ($first !== null && $linkedInvoice) {
+            $matching = CreditCardInvoice::query()
+                ->where('user_id', Auth::id())
+                ->where('credit_card_id', $first->id)
+                ->find($linkedInvoice);
+
+            if ($matching !== null) {
+                $this->selectedInvoiceId = (string) $matching->id;
+                $this->invoiceModalOpen = true;
+            }
+        }
         $this->cardFormOpen = $first === null;
         $this->resetPurchaseForm();
         $this->resetInterestForm();
