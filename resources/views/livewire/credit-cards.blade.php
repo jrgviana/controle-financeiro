@@ -4,7 +4,7 @@
             <p class="text-sm font-semibold text-sky-700">Administração de cartões e faturas</p>
             <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Cartões de crédito</h1>
             <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
-                Gerencie seus cartões e consulte faturas futuras, vencidas e quitadas. As compras são registradas na tela Gastos.
+                Gerencie seus cartões, parcelas e pagamentos. As compras são registradas na tela Gastos.
             </p>
         </div>
         <button type="button" wire:click="openCardForm"
@@ -182,7 +182,7 @@
                                     <span class="flex items-center justify-between gap-2">
                                         <strong class="text-sm text-slate-900">{{ $entry->due_on->format('d/m/Y') }}</strong>
                                         <span class="text-xs font-semibold {{ $paidOff ? 'text-emerald-700' : ($partiallyPaid ? 'text-amber-700' : 'text-slate-600') }}">
-                                            {{ $paidOff ? 'Quitada' : ($partiallyPaid ? 'Parcial' : ($entry->due_on->isPast() ? 'Vencida' : 'A vencer')) }}
+                                            {{ $paidOff ? 'Quitada' : ($partiallyPaid ? 'Parcial' : 'Em aberto') }}
                                         </span>
                                     </span>
                                     <span class="mt-2 flex justify-between gap-2 text-xs text-slate-500">
