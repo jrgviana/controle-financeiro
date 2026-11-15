@@ -53,7 +53,7 @@ class AccountTransfersTest extends TestCase
         ]);
     }
 
-    private function send(User $user, FinancialAccount $from, FinancialAccount $to, string $value): \Livewire\Features\SupportTesting\Testable
+    private function send(User $user, FinancialAccount $from, FinancialAccount $to, string $value)
     {
         return Livewire::actingAs($user)->test(AccountTransfers::class)
             ->set('fromAccountId', (string) $from->id)
@@ -258,7 +258,7 @@ class AccountTransfersTest extends TestCase
         $transfer = AccountTransfer::firstOrFail();
         Livewire::actingAs($viewer)->test(AccountTransfers::class)
             ->call('undo', $transfer->id)
-            ->assertNotFound();
+            ->assertStatus(404);
 
         $this->assertNotNull(AccountTransfer::find($transfer->id));
     }
