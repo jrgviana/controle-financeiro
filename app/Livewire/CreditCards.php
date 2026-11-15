@@ -283,6 +283,17 @@ class CreditCards extends Component
         $firstDue = $cycle->firstDue($card, $data['purchaseOn']);
 
         $firstInvoice = DB::transaction(function () use ($card, $data, $cycle, $cents, $count, $firstDue): int {
+            $lockedCard = CreditCard::query()
+                ->where('user_id', Auth::id())
+                ->lockForUpdate()
+                ->findOrFail($card->id);
+
+            if (! $lockedCard->active) {
+                throw ValidationException::withMessages([
+                    'purchaseDescription' => 'Este cartão está desativado para novas compras.',
+                ]);
+            }
+
             $purchase = CreditCardPurchase::create([
                 'user_id' => Auth::id(),
                 'credit_card_id' => $card->id,
@@ -300,12 +311,7 @@ class CreditCards extends Component
 
             for ($i = 0; $i < $count; $i++) {
                 $due = $cycle->dueForInstallment($card, $firstDue, $i);
-                $invoice = CreditCardInvoice::firstOrCreate([
-                    'credit_card_id' => $card->id,
-                    'due_on' => $due->toDateString(),
-                ], [
-                    'user_id' => Auth::id(),
-                ]);
+                $invoice = CreditCardInvoice::forDue($lockedCard, $due->toDateString());
 
                 if ($i === 0) {
                     $firstId = $invoice->id;
@@ -458,12 +464,7 @@ class CreditCards extends Component
             if ($remaining > 0) {
                 $nextDue = $cycle->nextDue($lockedCard, $lockedInvoice->due_on->toDateString());
 
-                $nextInvoice = CreditCardInvoice::firstOrCreate([
-                    'credit_card_id' => $lockedCard->id,
-                    'due_on' => $nextDue->toDateString(),
-                ], [
-                    'user_id' => Auth::id(),
-                ]);
+                $nextInvoice = CreditCardInvoice::forDue($lockedCard, $nextDue->toDateString());
 
                 return $nextInvoice->id;
             }
