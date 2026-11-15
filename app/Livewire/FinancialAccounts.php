@@ -585,7 +585,7 @@ class FinancialAccounts extends Component
             ->take(24)->values();
 
         $billToPay = $this->billToPayId !== null
-            ? $bills->firstWhere('id', $this->billToPayId)
+            ? ScheduledBill::query()->where('user_id', Auth::id())->find($this->billToPayId)
             : null;
         $cardInvoiceToPay = $this->cardInvoiceToPayId !== null
             ? $cardInvoices->first(fn ($row) => $row['invoice']->id === $this->cardInvoiceToPayId)
@@ -603,6 +603,7 @@ class FinancialAccounts extends Component
             'modalSourceBalance' => $modalSource ? FinancialBalance::loadedCents($modalSource) : 0,
             'transferDestinations' => $transferDestinations,
             'accounts' => $accounts,
+            'activeAccounts' => $activeAccounts,
             'activeCount' => $activeAccounts->count(),
             'initialTotal' => number_format((float) $activeAccounts->sum('initial_balance'), 2, ',', '.'),
             'estimatedBalance' => number_format(abs($balanceCents) / 100, 2, ',', '.'),
