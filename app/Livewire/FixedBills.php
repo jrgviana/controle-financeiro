@@ -250,6 +250,11 @@ class FixedBills extends Component
             if ($existing?->daily_expense_id !== null) {
                 throw ValidationException::withMessages(['occurrenceAmount' => 'Este mês já foi pago.']);
             }
+            if ($existing !== null && $cents < $existing->receivedCents()) {
+                throw ValidationException::withMessages([
+                    'occurrenceAmount' => 'O valor não pode ser menor que o já pago nesta conta.',
+                ]);
+            }
             if ($existing === null && (! $fixed->active || $fixed->starts_on->startOfMonth()->greaterThan($month))) {
                 throw ValidationException::withMessages(['occurrenceAmount' => 'Conta fixa inativa ou ainda não iniciada.']);
             }

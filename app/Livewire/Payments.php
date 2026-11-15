@@ -273,10 +273,14 @@ class Payments extends Component
     {
         $agenda = $this->agenda();
         $selectedRow = $this->paymentOpen ? $this->selectedEntry() : null;
+        $postponeRow = $this->postponeOpen
+            ? $agenda['pending']->first(fn ($row) => $row['key'] === $this->selectedPostponeKey)
+            : null;
 
         return view('livewire.payments', [
             'agenda' => $agenda,
             'selectedRow' => $selectedRow,
+            'postponeRow' => $postponeRow,
         ])->layout('layouts.app');
     }
 }
