@@ -40,21 +40,94 @@
 
     <div class="grid gap-3 sm:grid-cols-3">
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p class="text-xs font-medium text-slate-500">Previsto no mês</p>
+            <p class="text-xs font-medium text-slate-500">Contas fixas e avulsas previstas</p>
             <p class="mt-2 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($plannedCents) }}</p>
             <p class="mt-1 text-xs text-slate-500">Não descontado automaticamente</p>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p class="text-xs font-medium text-slate-500">Contas já quitadas</p>
+            <p class="text-xs font-medium text-slate-500">Contas fixas e avulsas quitadas</p>
             <p class="mt-2 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($paidCents) }}</p>
             <p class="mt-1 text-xs text-slate-500">Pagamentos confirmados</p>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p class="text-xs font-medium text-slate-500">Ainda a pagar no mês</p>
+            <p class="text-xs font-medium text-slate-500">Contas fixas e avulsas a pagar</p>
             <p class="mt-2 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($pendingCents) }}</p>
             <p class="mt-1 text-xs text-slate-500">Compromissos pendentes, sem sinal negativo</p>
         </div>
     </div>
+
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+                <h2 class="text-lg font-semibold">Parcelas dos cartões que vencem neste mês</h2>
+                <p class="mt-2 max-w-3xl text-xs leading-5 text-slate-500">
+                    As parcelas são exibidas pelo vencimento gerado no fechamento de cada cartão.
+                    Uma compra realizada depois do fechamento entra somente na fatura do próximo ciclo.
+                    Aqui aparece <strong>apenas o valor de cada parcela</strong>, nunca o valor total da compra novamente.
+                </p>
+            </div>
+            <div class="text-left sm:text-right">
+                <p class="text-xs text-slate-500">Parcelas previstas neste mês</p>
+                <p class="mt-1 text-2xl font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($cardMonthCents) }}</p>
+                @if ($cardAdvancedCents > 0)
+                    <p class="mt-1 text-xs font-semibold text-emerald-700">
+                        R$ {{ \App\Support\FinancialBalance::formatted($cardAdvancedCents) }} em parcelas antecipadas
+                    </p>
+                @endif
+            </div>
+        </div>
+
+        <div class="mt-5 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
+            @forelse ($cardInstallments as $row)
+                @php
+                    $item = $row['installment'];
+                    $invoice = $row['invoice'];
+                    $purchase = $row['purchase'];
+                @endphp
+                <div wire:key="monthly-card-installment-{{ $item->id }}"
+                     class="grid min-w-0 gap-2 px-4 py-4 text-sm lg:grid-cols-12 lg:items-center lg:gap-3">
+                    <div class="min-w-0 lg:col-span-4">
+                        <p class="break-words font-semibold text-slate-900">{{ $purchase?->description ?? 'Compra no cartão' }}</p>
+                        <p class="mt-1 break-words text-xs text-slate-500">{{ $row['card']->name }}</p>
+                    </div>
+                    <div class="text-xs lg:col-span-2">
+                        Parcela {{ $item->installment_number }} de {{ $purchase?->installments_count ?? '?' }}
+                    </div>
+                    <div class="text-xs text-slate-600 lg:col-span-2">
+                        Vence {{ $invoice->due_on->format('d/m/Y') }}
+                    </div>
+                    <div class="lg:col-span-2">
+                        <p class="font-semibold tabular-nums">
+                            R$ {{ \App\Support\FinancialBalance::formatted($row['amount_cents']) }}
+                        </p>
+                        <p class="mt-1 text-xs {{ $row['advanced'] || $row['invoice_paid'] ? 'text-emerald-700' : 'text-slate-500' }}">
+                            {{ $row['advanced'] ? 'Antecipada' : ($row['invoice_paid'] ? 'Fatura quitada' : ($row['invoice_partially_paid'] ? 'Fatura parcialmente paga' : ($invoice->due_on->isPast() ? 'Vencida' : 'A vencer'))) }}
+                        </p>
+                    </div>
+                    <div class="lg:col-span-2 lg:text-right">
+                        <a href="{{ route('cartoes.index', ['cartao' => $row['card']->id, 'fatura' => $invoice->id]) }}"
+                           class="inline-flex rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">
+                            Ver fatura
+                        </a>
+                    </div>
+                </div>
+            @empty
+                <p class="px-5 py-8 text-center text-sm text-slate-500">
+                    Nenhuma parcela de cartão vence no mês selecionado. Consulte outros meses ou os cartões cadastrados.
+                </p>
+            @endforelse
+        </div>
+
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <p class="text-xs leading-5 text-slate-500">
+                Valores de cartão não são despesas fixas cadastradas novamente.
+                Para pagar ou antecipar, abra o modal da fatura em Cartões.
+            </p>
+            <p class="text-sm font-semibold tabular-nums">
+                Total planejado (fixas + parcelas): R$ {{ \App\Support\FinancialBalance::formatted($totalScheduledCents) }}
+            </p>
+        </div>
+    </section>
 
     <section>
         <div class="flex flex-wrap items-center justify-between gap-3">
