@@ -241,7 +241,7 @@ class CardInstallmentAdvanceTest extends TestCase
 
         $this->actingAs($user)->get('/cartoes?cartao='.$card->id.'&fatura='.$invoice->id)
             ->assertOk()
-            ->assertSee('Consulta'); // O modal deve aparecer já na fatura vinculada.
+            ->assertSee('Faturas e antecipação'); // O modal já abre na fatura vinculada.
 
         Livewire::actingAs($user)->test(CreditCards::class)
             ->call('selectCard', $card->id)
