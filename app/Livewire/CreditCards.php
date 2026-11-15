@@ -7,7 +7,6 @@ use App\Models\CreditCardInstallment;
 use App\Models\CreditCardInvoice;
 use App\Models\CreditCardInvoiceCharge;
 use App\Models\CreditCardInvoicePayment;
-use App\Models\CreditCardPurchase;
 use App\Models\FinancialAccount;
 use App\Support\CreditCardCycle;
 use App\Support\CreditCardLedger;
@@ -62,7 +61,12 @@ class CreditCards extends Component
 
     public function mount(): void
     {
-        $first = CreditCard::query()
+        $selected = filter_var(request()->query('cartao'), FILTER_VALIDATE_INT);
+        $first = $selected
+            ? CreditCard::query()->where('user_id', Auth::id())->whereKey($selected)->first()
+            : null;
+
+        $first ??= CreditCard::query()
             ->where('user_id', Auth::id())
             ->orderBy('name')
             ->first();
@@ -254,16 +258,11 @@ class CreditCards extends Component
         $this->resetPurchaseForm();
     }
 
+    // Mantido para compatibilidade com lançamentos já integrados;
+    // na interface, a entrada de novas compras está somente em Gastos.
     public function savePurchase(): void
     {
-        $cycle = app(CreditCardCycle::class);
         $card = $this->selectedCard();
-
-        if (! $card->active) {
-            $this->addError('purchaseDescription', 'Este cartão está desativado para novas compras.');
-
-            return;
-        }
 
         $data = $this->validate([
             'purchaseDescription' => ['required', 'string', 'min:2', 'max:160'],
@@ -272,67 +271,28 @@ class CreditCards extends Component
             'installmentsCount' => ['required', 'integer', 'between:1,60'],
             'purchaseCategory' => ['required', Rule::in(array_keys(self::CATEGORIES))],
             'purchaseNotes' => ['nullable', 'string', 'max:500'],
-        ], [
-            'purchaseDescription.required' => 'Informe o que foi comprado.',
-            'purchaseOn.before_or_equal' => 'A compra precisa já ter sido realizada.',
-            'installmentsCount.between' => 'Escolha entre 1 e 60 parcelas.',
         ]);
 
         $cents = $this->moneyCents($data['purchaseAmount'], 'purchaseAmount');
+
+        app(\App\Services\RecordCreditCardPurchase::class)->execute(
+            (int) Auth::id(),
+            $card->id,
+            $data['purchaseOn'],
+            $data['purchaseDescription'],
+            $data['purchaseCategory'],
+            $cents,
+            (int) $data['installmentsCount'],
+            $data['purchaseNotes'] ?? null,
+        );
+
+        $this->selectedInvoiceId = $this->preferredInvoiceId($card);
         $count = (int) $data['installmentsCount'];
-        $firstDue = $cycle->firstDue($card, $data['purchaseOn']);
-
-        $firstInvoice = DB::transaction(function () use ($card, $data, $cycle, $cents, $count, $firstDue): int {
-            $lockedCard = CreditCard::query()
-                ->where('user_id', Auth::id())
-                ->lockForUpdate()
-                ->findOrFail($card->id);
-
-            if (! $lockedCard->active) {
-                throw ValidationException::withMessages([
-                    'purchaseDescription' => 'Este cartão está desativado para novas compras.',
-                ]);
-            }
-
-            $purchase = CreditCardPurchase::create([
-                'user_id' => Auth::id(),
-                'credit_card_id' => $card->id,
-                'purchased_on' => $data['purchaseOn'],
-                'description' => trim($data['purchaseDescription']),
-                'category' => $data['purchaseCategory'],
-                'amount' => $this->decimal($cents),
-                'installments_count' => $count,
-                'notes' => trim($data['purchaseNotes'] ?? '') ?: null,
-            ]);
-
-            $each = intdiv($cents, $count);
-            $remainder = $cents % $count;
-            $firstId = 0;
-
-            for ($i = 0; $i < $count; $i++) {
-                $due = $cycle->dueForInstallment($card, $firstDue, $i);
-                $invoice = CreditCardInvoice::forDue($lockedCard, $due->toDateString());
-
-                if ($i === 0) {
-                    $firstId = $invoice->id;
-                }
-
-                CreditCardInstallment::create([
-                    'user_id' => Auth::id(),
-                    'credit_card_purchase_id' => $purchase->id,
-                    'credit_card_invoice_id' => $invoice->id,
-                    'installment_number' => $i + 1,
-                    'amount' => $this->decimal($each + ($i === $count - 1 ? $remainder : 0)),
-                ]);
-            }
-
-            return $firstId;
-        }, 3);
-
-        $this->selectedInvoiceId = (string) $firstInvoice;
         $this->resetValidation();
         $this->resetPurchaseForm();
-        session()->flash('success', 'Compra lançada e '.($count === 1 ? 'parcela 1/1 gerada.' : $count.' parcelas distribuídas nas faturas.'));
+        session()->flash('success', $count === 1
+            ? 'Compra lançada e parcela 1/1 gerada.'
+            : $count.' parcelas distribuídas nas faturas.');
     }
 
     private function resetInterestForm(): void
@@ -510,16 +470,6 @@ class CreditCards extends Component
             ->orderBy('name')
             ->get();
 
-        $recentPurchases = $card
-            ? CreditCardPurchase::query()
-                ->where('user_id', Auth::id())
-                ->where('credit_card_id', $card->id)
-                ->orderByDesc('purchased_on')
-                ->orderByDesc('id')
-                ->limit(10)
-                ->get()
-            : collect();
-
         return view('livewire.credit-cards', [
             'cards' => $cards,
             'card' => $card,
@@ -528,7 +478,6 @@ class CreditCards extends Component
             'selectedInvoice' => $selected,
             'accounts' => $accounts,
             'categories' => self::CATEGORIES,
-            'recentPurchases' => $recentPurchases,
             'totalDebtCents' => $summary->sum('debt_cents'),
         ])->layout('layouts.app');
     }
