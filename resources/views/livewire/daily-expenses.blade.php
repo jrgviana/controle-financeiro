@@ -11,6 +11,9 @@
     @if (session()->has('success'))
         <div role="status" class="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">{{ session('success') }}</div>
     @endif
+    @if (session()->has('error'))
+        <div role="alert" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{{ session('error') }}</div>
+    @endif
 
     <section class="mt-8 rounded-2xl border border-sky-200 bg-white p-5 shadow-sm sm:p-7">
         <div class="flex flex-wrap items-center justify-between gap-3">
@@ -207,7 +210,7 @@
             </div>
         </div>
 
-        <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div wire:key="spending-history-{{ $historyVersion }}" class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div class="hidden gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 lg:grid lg:grid-cols-[90px_minmax(0,1.65fr)_minmax(0,1.1fr)_minmax(0,1.05fr)_110px_110px]">
                 <span>Data</span><span>Descrição</span><span>Modalidade</span><span>Conta / cartão</span>
                 <span class="text-right">Valor</span><span class="text-right">Ações</span>
@@ -239,12 +242,14 @@
                             R$ {{ number_format((float) $movement['amount'], 2, ',', '.') }}
                         </p>
                         <div class="flex flex-wrap gap-2 lg:justify-end">
-                            @if ($movement['kind'] === 'account')
+                            @if ($movement['kind'] === 'account' && ! ($movement['planned'] ?? false))
                                 <button type="button" wire:click="edit({{ $movement['id'] }})"
                                     class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">Editar</button>
                                 <button type="button" wire:click="delete({{ $movement['id'] }})"
                                     wire:confirm="Remover este gasto? O registro ficará preservado."
                                     class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">Remover</button>
+                            @elseif ($movement['kind'] === 'account')
+                                <a href="{{ route('contas.index') }}" class="text-xs font-semibold text-sky-700 underline">Conta quitada</a>
                             @else
                                 <a href="{{ route('cartoes.index', ['cartao' => $movement['card_id']]) }}"
                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-100">

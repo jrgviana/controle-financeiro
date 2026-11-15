@@ -33,6 +33,11 @@ class DailyExpense extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function scheduledBill(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(ScheduledBill::class, 'daily_expense_id');
+    }
+
     public function financialAccount(): BelongsTo
     {
         return $this->belongsTo(FinancialAccount::class);
