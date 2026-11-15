@@ -138,6 +138,8 @@ class UnifiedSpendingTest extends TestCase
             ->assertSee('Ver faturas');
 
         Livewire::actingAs($user)->test(CreditCards::class)
+            ->call('selectCard', $card->id)
+            ->assertSet('invoiceModalOpen', true)
             ->assertSee('Parcela 1 de 1')
             ->assertSee('Combustível');
     }
