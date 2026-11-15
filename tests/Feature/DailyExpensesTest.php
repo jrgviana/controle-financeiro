@@ -43,6 +43,63 @@ class DailyExpensesTest extends TestCase
         $this->get('/gastos')->assertRedirect('/login');
     }
 
+    public function test_form_is_visible_without_pressing_new_expense(): void
+    {
+        $user = User::factory()->create();
+        $account = $this->account($user);
+
+        Livewire::actingAs($user)->test(DailyExpenses::class)
+            ->assertSee('Registrar gasto pago')
+            ->assertSee('Descrição')
+            ->assertSee('Valor pago')
+            ->assertSet('accountId', (string) $account->id)
+            ->assertSet('amount', 'R$ 0,00');
+    }
+
+    public function test_form_stays_ready_and_resets_after_saving(): void
+    {
+        $user = User::factory()->create();
+        $account = $this->account($user);
+
+        Livewire::actingAs($user)->test(DailyExpenses::class)
+            ->set('description', 'Café')
+            ->set('category', 'alimentacao')
+            ->set('accountId', (string) $account->id)
+            ->set('amount', 'R$ 8,50')
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSee('Registrar gasto pago')
+            ->assertSet('editingId', null)
+            ->assertSet('description', '')
+            ->assertSet('category', 'outros')
+            ->assertSet('accountId', (string) $account->id)
+            ->assertSet('amount', 'R$ 0,00');
+
+        $this->assertDatabaseHas('daily_expenses', [
+            'user_id' => $user->id,
+            'description' => 'Café',
+            'amount' => '8.50',
+        ]);
+    }
+
+    public function test_canceling_edit_returns_to_empty_form(): void
+    {
+        $user = User::factory()->create();
+        $account = $this->account($user);
+        $expense = $this->expense($user, $account);
+
+        Livewire::actingAs($user)->test(DailyExpenses::class)
+            ->call('edit', $expense->id)
+            ->assertSet('editingId', $expense->id)
+            ->assertSet('description', 'Almoço')
+            ->call('cancel')
+            ->assertSet('editingId', null)
+            ->assertSet('description', '')
+            ->assertSet('amount', 'R$ 0,00')
+            ->assertSee('Registrar gasto pago');
+    }
+
+
     public function test_logged_in_user_can_open_expenses(): void
     {
         $this->actingAs(User::factory()->create())
@@ -55,7 +112,6 @@ class DailyExpensesTest extends TestCase
         $account = $this->account($user);
 
         Livewire::actingAs($user)->test(DailyExpenses::class)
-            ->call('openCreate')
             ->set('paidOn', now()->toDateString())
             ->set('description', 'Combustível')
             ->set('category', 'transporte')
@@ -101,7 +157,6 @@ class DailyExpensesTest extends TestCase
         $account = $this->account($user);
 
         Livewire::actingAs($user)->test(DailyExpenses::class)
-            ->call('openCreate')
             ->set('description', 'Conta futura')
             ->set('accountId', (string) $account->id)
             ->set('amount', 'R$ 15,00')
@@ -116,7 +171,6 @@ class DailyExpensesTest extends TestCase
         $account = $this->account($user);
 
         Livewire::actingAs($user)->test(DailyExpenses::class)
-            ->call('openCreate')
             ->set('description', 'Teste')
             ->set('accountId', (string) $account->id)
             ->set('amount', 'R$ 0,00')
@@ -132,7 +186,6 @@ class DailyExpensesTest extends TestCase
         $otherAccount = $this->account($owner);
 
         Livewire::actingAs($other)->test(DailyExpenses::class)
-            ->call('openCreate')
             ->set('description', 'Gasto indevido')
             ->set('accountId', (string) $otherAccount->id)
             ->set('amount', 'R$ 5,00')

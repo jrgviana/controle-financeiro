@@ -5,8 +5,7 @@
             <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Gastos diários</h1>
             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-500">Registre despesas já pagas no PIX, débito ou dinheiro. Cartões de crédito e contas a vencer serão controlados separadamente.</p>
         </div>
-        <button type="button" wire:click="openCreate" @disabled(! $hasActiveAccounts)
-            class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">+ Novo gasto</button>
+
     </div>
 
     @if (session()->has('success'))
@@ -21,29 +20,15 @@
         </div>
     @endunless
 
-    <section class="mt-8 grid gap-4 sm:grid-cols-2">
-        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p class="text-sm font-medium text-slate-500">Gastos pagos no período</p>
-            <p class="mt-3 text-3xl font-semibold tracking-tight tabular-nums">R$ {{ $monthTotal }}</p>
-            <p class="mt-2 text-xs text-slate-500">Somente despesas efetivamente pagas.</p>
-        </div>
-        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p class="text-sm font-medium text-slate-500">Lançamentos no período</p>
-            <p class="mt-3 text-3xl font-semibold tracking-tight tabular-nums">{{ $monthCount }}</p>
-            <p class="mt-2 text-xs text-slate-500">Resumo atualizado pelos filtros abaixo.</p>
-        </div>
-    </section>
-
-    @if ($formOpen)
-        <section class="mt-8 rounded-2xl border border-sky-200 bg-white p-6 shadow-sm sm:p-8">
+    <section class="mt-8 rounded-2xl border border-sky-200 bg-white p-6 shadow-sm sm:p-8">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-lg font-semibold">{{ $editingId ? 'Editar gasto' : 'Registrar gasto pago' }}</h2>
                     <p class="mt-1 text-sm text-slate-500">O valor será vinculado à conta de onde saiu o dinheiro.</p>
                 </div>
-                <button type="button" wire:click="cancel" class="rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100">Cancelar</button>
+                <p class="text-xs text-slate-400">Preencha e salve. O formulário ficará pronto para o próximo gasto.</p>
             </div>
-            <form wire:submit="save" class="mt-6 grid gap-5 md:grid-cols-2">
+            <form wire:submit="save" wire:key="expense-form-{{ $editingId ?? 'new' }}-{{ $formVersion }}" class="mt-6 grid gap-5 md:grid-cols-2">
                 <div>
                     <label for="expense-description" class="mb-2 block text-sm font-medium">Descrição</label>
                     <input id="expense-description" type="text" wire:model="description" maxlength="160" required placeholder="Ex.: Almoço, combustível, farmácia"
@@ -92,15 +77,29 @@
                     @error('notes') <p class="mt-2 text-xs text-red-600" role="alert">{{ $message }}</p> @enderror
                 </div>
                 <div class="flex flex-wrap gap-3 md:col-span-2">
-                    <button type="submit" wire:loading.attr="disabled" wire:target="save"
+                    <button type="submit" wire:loading.attr="disabled" wire:target="save" @disabled(! $hasActiveAccounts && $editingId === null)
                         class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60">
                         {{ $editingId ? 'Salvar alterações' : 'Registrar gasto' }}
                     </button>
-                    <button type="button" wire:click="cancel" class="rounded-xl border border-slate-200 px-5 py-3 text-sm font-medium hover:bg-slate-100">Cancelar</button>
+                    <button type="button" wire:click="cancel" class="rounded-xl border border-slate-200 px-5 py-3 text-sm font-medium hover:bg-slate-100">
+                        {{ $editingId ? 'Cancelar edição' : 'Limpar campos' }}
+                    </button>
                 </div>
             </form>
-        </section>
-    @endif
+    </section>
+
+    <section class="mt-8 grid gap-4 sm:grid-cols-2">
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p class="text-sm font-medium text-slate-500">Gastos pagos no período</p>
+            <p class="mt-3 text-3xl font-semibold tracking-tight tabular-nums">R$ {{ $monthTotal }}</p>
+            <p class="mt-2 text-xs text-slate-500">Somente despesas efetivamente pagas.</p>
+        </div>
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p class="text-sm font-medium text-slate-500">Lançamentos no período</p>
+            <p class="mt-3 text-3xl font-semibold tracking-tight tabular-nums">{{ $monthCount }}</p>
+            <p class="mt-2 text-xs text-slate-500">Resumo atualizado pelos filtros abaixo.</p>
+        </div>
+    </section>
 
     <section class="mt-9">
         <div class="flex flex-wrap items-end justify-between gap-4">

@@ -25,8 +25,8 @@ class DailyExpenses extends Component
         'outros' => 'Outros',
     ];
 
-    public bool $formOpen = false;
     public ?int $editingId = null;
+    public int $formVersion = 0;
     public string $paidOn = '';
     public string $description = '';
     public string $category = 'outros';
@@ -39,7 +39,7 @@ class DailyExpenses extends Component
     public function mount(): void
     {
         $this->selectedMonth = now()->format('Y-m');
-        $this->paidOn = now()->toDateString();
+        $this->resetForm();
     }
 
     public function updatedSelectedMonth(): void
@@ -52,7 +52,7 @@ class DailyExpenses extends Component
         $this->resetPage();
     }
 
-    public function openCreate(): void
+    private function resetForm(): void
     {
         $firstId = FinancialAccount::query()
             ->where('user_id', Auth::id())
@@ -60,21 +60,14 @@ class DailyExpenses extends Component
             ->orderBy('name')
             ->value('id');
 
-        if ($firstId === null) {
-            session()->flash('error', 'Cadastre ou reative uma conta antes de lançar um gasto.');
-
-            return;
-        }
-
-        $this->resetValidation();
         $this->editingId = null;
         $this->paidOn = now()->toDateString();
         $this->description = '';
         $this->category = 'outros';
-        $this->accountId = (string) $firstId;
+        $this->accountId = $firstId !== null ? (string) $firstId : '';
         $this->amount = 'R$ 0,00';
         $this->notes = '';
-        $this->formOpen = true;
+        $this->formVersion++;
     }
 
     public function edit(int $id): void
@@ -88,14 +81,13 @@ class DailyExpenses extends Component
         $this->accountId = (string) $expense->financial_account_id;
         $this->amount = 'R$ '.number_format((float) $expense->amount, 2, ',', '.');
         $this->notes = $expense->notes ?? '';
-        $this->formOpen = true;
+        $this->formVersion++;
     }
 
     public function cancel(): void
     {
-        $this->formOpen = false;
-        $this->editingId = null;
         $this->resetValidation();
+        $this->resetForm();
     }
 
     public function save(): void
@@ -158,10 +150,10 @@ class DailyExpenses extends Component
             session()->flash('success', 'Gasto registrado com sucesso.');
         }
 
-        $this->formOpen = false;
-        $this->editingId = null;
         $this->selectedMonth = substr($data['paidOn'], 0, 7);
         $this->filterAccountId = '';
+        $this->resetValidation();
+        $this->resetForm();
         $this->resetPage();
     }
 
