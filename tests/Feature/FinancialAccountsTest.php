@@ -165,8 +165,7 @@ class FinancialAccountsTest extends TestCase
             ->assertOk()
             ->assertSee('Itaú')
             ->assertSee('Neon')
-            ->assertSee('Recebidas: R$ 75,50')
-            ->assertSee('Enviadas: R$ 75,50')
+            ->assertSee('Transf.: R$ 75,50')
             ->assertSee('R$ 124,50');
 
         Livewire::actingAs($user)->test(FinancialAccounts::class)

@@ -117,7 +117,7 @@ class CreditCardsTest extends TestCase
 
         $this->assertDatabaseCount('credit_card_purchases', 1);
         $this->assertDatabaseCount('credit_card_installments', 1);
-        $this->assertDatabaseHas('credit_card_invoices', ['credit_card_id' => $card->id, 'due_on' => '2026-12-15']);
+        $this->assertSame('2026-12-15', $card->invoices()->firstOrFail()->due_on->toDateString());
         $this->assertDatabaseHas('credit_card_installments', ['installment_number' => 1, 'amount' => '82.78']);
     }
 
@@ -228,10 +228,9 @@ class CreditCardsTest extends TestCase
             ->call('payInvoice')
             ->assertHasNoErrors();
 
-        $this->assertDatabaseHas('credit_card_invoices', [
-            'credit_card_id' => $card->id,
-            'due_on' => '2026-12-15',
-        ]);
+        $this->assertTrue(
+            $card->invoices()->get()->contains(fn ($invoice) => $invoice->due_on->toDateString() === '2026-12-15')
+        );
 
         $rows = (new CreditCardLedger())->invoices($card);
         $this->assertSame(15000, $rows->last()['carry_cents']);
