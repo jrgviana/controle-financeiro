@@ -49,6 +49,8 @@ class FixedBills extends Component
     public string $billPaymentAccountId = '';
     public string $billPaidOn = '';
     public bool $cardPaymentOpen = false;
+    public bool $cardBreakdownOpen = false;
+    public ?int $cardBreakdownId = null;
     public ?int $cardInvoiceToPayId = null;
     public string $cardPayAccountId = '';
     public string $cardPayAmount = 'R$ 0,00';
@@ -401,6 +403,20 @@ class FixedBills extends Component
         }
     }
 
+    public function openCardBreakdown(int $cardId): void
+    {
+        CreditCard::query()->where('user_id', Auth::id())->findOrFail($cardId);
+        $this->cardBreakdownId = $cardId;
+        $this->cardBreakdownOpen = true;
+        $this->resetValidation();
+    }
+
+    public function closeCardBreakdown(): void
+    {
+        $this->cardBreakdownOpen = false;
+        $this->cardBreakdownId = null;
+    }
+
     public function openCardPayment(int $invoiceId): void
     {
         $invoice = CreditCardInvoice::query()
@@ -418,6 +434,7 @@ class FixedBills extends Component
         }
 
         $this->resetValidation();
+        $this->closeCardBreakdown();
         $this->cardInvoiceToPayId = $invoice->id;
         $account = FinancialAccount::query()->where('user_id', Auth::id())
             ->where('active', true)->orderBy('name')->first();
@@ -613,6 +630,100 @@ class FixedBills extends Component
         $cardOverviewCents = $cardInvoiceTotalCents + $futureFirstInstallmentsCents;
         $totalOverviewCents = $plannedCents + $cardOverviewCents;
 
+        // Uma única lista de pagamentos previstos por cartão. O mês mostra
+        // faturas que vencem agora e a primeira parcela de compras lançadas
+        // agora cujo vencimento será em outro mês. Os valores não são duplicados:
+        // uma parcela que já consta na fatura do mês NÃO entra de novo.
+        $cardPaymentSummaries = collect();
+        $cardsForSummary = CreditCard::query()
+            ->where('user_id', Auth::id())
+            ->orderBy('name')
+            ->get();
+
+        foreach ($cardsForSummary as $card) {
+            $groups = collect();
+
+            foreach ($cardInvoices->filter(fn ($entry) => $entry['card']->id === $card->id) as $entry) {
+                $invoice = $entry['invoice'];
+                $row = $entry['row'];
+
+                $items = $invoice->installments->map(fn ($installment) => [
+                    'description' => $installment->purchase?->description ?? 'Compra',
+                    'installment_label' => $installment->installment_number
+                        .'/'.($installment->purchase?->installments_count ?? '?'),
+                    'amount_cents' => FinancialBalance::cents($installment->amount),
+                    'advanced' => $installment->scheduledPlan !== null || $installment->advance !== null,
+                ])->values();
+
+                if ($row['carry_cents'] > 0) {
+                    $items->push([
+                        'description' => 'Saldo anterior',
+                        'installment_label' => '',
+                        'amount_cents' => $row['carry_cents'],
+                        'advanced' => false,
+                    ]);
+                }
+                foreach ($invoice->charges as $charge) {
+                    $items->push([
+                        'description' => $charge->description,
+                        'installment_label' => 'Encargos',
+                        'amount_cents' => FinancialBalance::cents($charge->amount),
+                        'advanced' => false,
+                    ]);
+                }
+
+                $groups->push([
+                    'invoice' => $invoice,
+                    'due_on' => $invoice->due_on,
+                    'amount_cents' => $row['total_cents'],
+                    'paid_cents' => $row['paid_cents'],
+                    'remaining_cents' => $row['remaining_cents'],
+                    'items' => $items,
+                    'is_current_due' => true,
+                ]);
+            }
+
+            $futurePurchases = $cardPurchasesMadeInMonth
+                ->filter(fn ($entry) => $entry['purchase']->credit_card_id === $card->id
+                    && ($entry['first_due_on']?->greaterThan($month->endOfMonth()) ?? false))
+                ->groupBy(fn ($entry) => (string) $entry['first_installment']->credit_card_invoice_id);
+
+            foreach ($futurePurchases as $purchases) {
+                $first = $purchases->first();
+                $invoice = $first['first_installment']->invoice;
+                $items = $purchases->map(fn ($entry) => [
+                    'description' => $entry['purchase']->description,
+                    'installment_label' => '1/'.$entry['purchase']->installments_count,
+                    'amount_cents' => $entry['first_installment_cents'],
+                    'advanced' => false,
+                ])->values();
+
+                $value = $purchases->sum('first_installment_cents');
+                $groups->push([
+                    'invoice' => $invoice,
+                    'due_on' => $invoice->due_on,
+                    'amount_cents' => $value,
+                    'paid_cents' => 0,
+                    'remaining_cents' => $value,
+                    'items' => $items,
+                    'is_current_due' => false,
+                ]);
+            }
+
+            $amountCents = $groups->sum('amount_cents');
+            if ($amountCents > 0) {
+                $cardPaymentSummaries->push([
+                    'card' => $card,
+                    'amount_cents' => $amountCents,
+                    'groups' => $groups->sortBy(fn ($group) => $group['due_on']->format('Y-m-d'))->values(),
+                ]);
+            }
+        }
+
+        $selectedCardBreakdown = $this->cardBreakdownOpen && $this->cardBreakdownId !== null
+            ? $cardPaymentSummaries->first(fn ($entry) => $entry['card']->id === $this->cardBreakdownId)
+            : null;
+
         $cardInvoiceToPay = null;
         if ($this->cardInvoiceToPayId !== null) {
             $cardInvoiceToPay = $cardInvoices
@@ -630,6 +741,8 @@ class FixedBills extends Component
         return view('livewire.fixed-bills', [
             'fixedRows' => $fixedRows,
             'cardInvoices' => $cardInvoices,
+            'cardPaymentSummaries' => $cardPaymentSummaries,
+            'selectedCardBreakdown' => $selectedCardBreakdown,
             'cardPurchasesMadeInMonth' => $cardPurchasesMadeInMonth,
             'cardPurchasesMadeCount' => $cardPurchasesMadeCount,
             'newPurchaseFirstInstallmentsCents' => $newPurchaseFirstInstallmentsCents,
