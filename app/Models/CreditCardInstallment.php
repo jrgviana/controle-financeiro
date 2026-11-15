@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class CreditCardInstallment extends Model
 {
@@ -19,6 +20,11 @@ class CreditCardInstallment extends Model
     public function purchase(): BelongsTo
     {
         return $this->belongsTo(CreditCardPurchase::class, 'credit_card_purchase_id');
+    }
+
+    public function advance(): HasOne
+    {
+        return $this->hasOne(CreditCardInstallmentAdvance::class, 'credit_card_installment_id');
     }
 
     public function invoice(): BelongsTo

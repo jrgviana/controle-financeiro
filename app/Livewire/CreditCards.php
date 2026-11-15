@@ -8,6 +8,7 @@ use App\Models\CreditCardInvoice;
 use App\Models\CreditCardInvoiceCharge;
 use App\Models\CreditCardInvoicePayment;
 use App\Models\FinancialAccount;
+use App\Services\AdvanceCreditCardInstallments;
 use App\Support\CreditCardCycle;
 use App\Support\CreditCardLedger;
 use App\Support\FinancialBalance;
@@ -33,6 +34,9 @@ class CreditCards extends Component
     public string $selectedCardId = '';
     public string $selectedInvoiceId = '';
     public bool $invoiceModalOpen = false;
+    public array $advanceInstallmentIds = [];
+    public string $advanceAccountId = '';
+    public string $advanceOn = '';
 
     public bool $cardFormOpen = false;
     public ?int $editingCardId = null;
@@ -74,10 +78,23 @@ class CreditCards extends Component
 
         $this->selectedCardId = $first !== null ? (string) $first->id : '';
         $this->selectedInvoiceId = $first !== null ? $this->preferredInvoiceId($first) : '';
+        $linkedInvoice = filter_var(request()->query('fatura'), FILTER_VALIDATE_INT);
+        if ($first !== null && $linkedInvoice) {
+            $matching = CreditCardInvoice::query()
+                ->where('user_id', Auth::id())
+                ->where('credit_card_id', $first->id)
+                ->find($linkedInvoice);
+
+            if ($matching !== null) {
+                $this->selectedInvoiceId = (string) $matching->id;
+                $this->invoiceModalOpen = true;
+            }
+        }
         $this->cardFormOpen = $first === null;
         $this->resetPurchaseForm();
         $this->resetInterestForm();
         $this->resetPaymentForm();
+        $this->resetAdvanceForm();
     }
 
     public function openCardForm(): void
@@ -212,11 +229,13 @@ class CreditCards extends Component
         $this->resetPurchaseForm();
         $this->resetInterestForm();
         $this->resetPaymentForm();
+        $this->resetAdvanceForm();
     }
 
     public function closeInvoices(): void
     {
         $this->invoiceModalOpen = false;
+        $this->advanceInstallmentIds = [];
     }
 
     public function selectInvoice(int $id): void
@@ -226,6 +245,7 @@ class CreditCards extends Component
         $this->resetValidation();
         $this->resetInterestForm();
         $this->resetPaymentForm();
+        $this->resetAdvanceForm();
     }
 
     private function ownedCard(int $id): CreditCard
@@ -331,6 +351,58 @@ class CreditCards extends Component
         $this->resetValidation();
         $this->resetInterestForm();
         session()->flash('success', 'Juros/encargos adicionados manualmente à fatura selecionada.');
+    }
+
+    private function resetAdvanceForm(): void
+    {
+        $this->advanceInstallmentIds = [];
+        $accountId = FinancialAccount::query()
+            ->where('user_id', Auth::id())
+            ->where('active', true)
+            ->orderBy('name')
+            ->value('id');
+
+        $this->advanceAccountId = $accountId !== null ? (string) $accountId : '';
+        $this->advanceOn = now()->toDateString();
+    }
+
+    public function advanceSelectedInstallments(): void
+    {
+        if (! $this->invoiceModalOpen) {
+            return;
+        }
+
+        $invoice = $this->ownedInvoice((int) $this->selectedInvoiceId);
+
+        $data = $this->validate([
+            'advanceInstallmentIds' => ['required', 'array', 'min:1'],
+            'advanceInstallmentIds.*' => ['required', 'integer', 'distinct'],
+            'advanceAccountId' => [
+                'required', 'integer',
+                Rule::exists('financial_accounts', 'id')->where('user_id', Auth::id())->where('active', true),
+            ],
+            'advanceOn' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+        ], [
+            'advanceInstallmentIds.required' => 'Selecione ao menos uma parcela para antecipar.',
+            'advanceAccountId.required' => 'Escolha a conta que pagou a antecipação.',
+        ]);
+
+        $result = app(AdvanceCreditCardInstallments::class)->execute(
+            (int) Auth::id(),
+            $invoice->id,
+            $data['advanceInstallmentIds'],
+            (int) $data['advanceAccountId'],
+            $data['advanceOn']
+        );
+
+        $this->resetValidation();
+        $this->resetAdvanceForm();
+        session()->flash(
+            'success',
+            $result['count'].' parcela(s) antecipada(s). R$ '
+                .FinancialBalance::formatted($result['amount_cents'])
+                .' descontados da conta escolhida, sem duplicar a dívida.'
+        );
     }
 
     private function resetPaymentForm(): void
@@ -453,6 +525,19 @@ class CreditCards extends Component
         ) ?? $invoices->first(fn ($row) => $row['remaining_cents'] > 0)
           ?? $invoices->last();
 
+        $advanceSelectable = $selected !== null
+            && $selected['invoice']->due_on->startOfDay()->isFuture()
+            && $selected['remaining_cents'] > 0;
+
+        $advanceOptions = $advanceSelectable
+            ? $selected['invoice']->installments->filter(fn ($row) => $row->advance === null)
+            : collect();
+
+        $selectedAdvanceIds = array_map('intval', $this->advanceInstallmentIds);
+        $advanceSelectedCents = $advanceOptions
+            ->filter(fn ($row) => in_array($row->id, $selectedAdvanceIds, true))
+            ->sum(fn ($row) => FinancialBalance::cents($row->amount));
+
         $summary = $cards->map(fn ($item) => [
             'card' => $item,
             'debt_cents' => $ledger->totalDebt($item),
@@ -471,6 +556,9 @@ class CreditCards extends Component
             'summaries' => $summary,
             'invoices' => $invoices,
             'selectedInvoice' => $selected,
+            'advanceSelectable' => $advanceSelectable,
+            'advanceSelectedCents' => $advanceSelectedCents,
+            'advanceOptions' => $advanceOptions,
             'accounts' => $accounts,
             'categories' => self::CATEGORIES,
             'totalDebtCents' => $summary->sum('debt_cents'),

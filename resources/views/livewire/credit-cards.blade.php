@@ -147,139 +147,173 @@
     @endif
 
     @if ($card && $invoiceModalOpen)
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 sm:p-6">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-2 sm:p-5">
             <div role="dialog" aria-modal="true" aria-labelledby="invoices-dialog-title"
-                 class="max-h-[93vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-slate-50 p-4 shadow-2xl sm:p-6">
-                <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+                 class="flex max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-slate-50 p-3 shadow-2xl sm:p-5">
+                <div class="mb-4 flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 pb-4">
                     <div>
-                        <p class="text-xs font-semibold text-sky-700">Consulta de faturas</p>
+                        <p class="text-xs font-semibold text-sky-700">Faturas e antecipação</p>
                         <h2 id="invoices-dialog-title" class="mt-1 text-xl font-semibold text-slate-900">{{ $card->name }}</h2>
+                        <p class="mt-1 text-xs text-slate-500">Escolha um vencimento à esquerda para consultar as parcelas e realizar pagamentos.</p>
                     </div>
                     <button type="button" wire:click="closeInvoices" aria-label="Fechar faturas"
-                        class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-100">Fechar</button>
+                        class="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-100">Fechar</button>
                 </div>
-        <section>
-            <div class="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h2 class="text-lg font-semibold">Faturas · {{ $card->name }}</h2>
-                    <p class="mt-1 max-w-3xl text-xs leading-5 text-slate-500">
-                        Cada fatura reúne parcelas com o mesmo vencimento. O saldo anterior em faturas futuras é uma projeção:
-                        muda conforme você registra pagamentos das faturas anteriores, sem duplicar a dívida.
-                    </p>
-                </div>
-                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                    {{ $invoices->count() }} faturas
-                </span>
-            </div>
-            <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div class="hidden gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.65fr)]">
-                    <span>Vencimento</span><span>Situação</span><span>Total da fatura</span><span>Saldo em aberto</span><span>Ação</span>
-                </div>
-                <div class="divide-y divide-slate-100">
-                    @forelse ($invoices as $row)
-                        @php
-                            $invoiceItem = $row['invoice'];
-                            $selectedHere = $selectedInvoice && $selectedInvoice['invoice']->id === $invoiceItem->id;
-                            $isPaid = $row['remaining_cents'] === 0;
-                            $isPartial = $row['paid_cents'] > 0 && ! $isPaid;
-                        @endphp
-                        <div wire:key="invoice-line-{{ $invoiceItem->id }}"
-                             class="grid min-w-0 gap-2 px-4 py-4 text-sm lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.65fr)] lg:items-center lg:gap-3 {{ $selectedHere ? 'bg-sky-50/50' : '' }}">
-                            <div>
-                                <p class="font-semibold text-slate-900">{{ $invoiceItem->due_on->format('d/m/Y') }}</p>
-                                <p class="mt-1 text-xs text-slate-500">{{ $invoiceItem->installments->count() }} parcela(s) no mês</p>
-                            </div>
-                            <div>
-                                <span class="text-xs font-semibold {{ $isPaid ? 'text-emerald-700' : ($isPartial ? 'text-amber-700' : 'text-slate-500') }}">
-                                    {{ $isPaid ? 'Quitada' : ($isPartial ? 'Parcial' : ($invoiceItem->due_on->isPast() ? 'Vencida' : 'A vencer')) }}
-                                </span>
-                            </div>
-                            <div>
-                                <p class="text-xs text-slate-500 lg:hidden">Total da fatura</p>
-                                <p class="font-medium tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($row['total_cents']) }}</p>
-                                @if ($row['carry_cents'] > 0)
-                                    <p class="mt-1 text-xs text-amber-700">Saldo anterior: R$ {{ \App\Support\FinancialBalance::formatted($row['carry_cents']) }}</p>
-                                @endif
-                            </div>
-                            <div>
-                                <p class="text-xs text-slate-500 lg:hidden">Saldo em aberto</p>
-                                <p class="font-semibold tabular-nums">R$ {{ \App\Support\FinancialBalance::formatted($row['remaining_cents']) }}</p>
-                                @if ($row['paid_cents'] > 0)
-                                    <p class="mt-1 text-xs text-slate-500">Pago: R$ {{ \App\Support\FinancialBalance::formatted($row['paid_cents']) }}</p>
-                                @endif
-                            </div>
-                            <div class="flex lg:justify-end">
-                                <button type="button" wire:click="selectInvoice({{ $invoiceItem->id }})"
-                                    class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-100">
-                                    {{ $selectedHere ? 'Selecionada' : 'Detalhes' }}
+
+                <div class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+                    <aside aria-label="Vencimentos do cartão"
+                           class="min-h-0 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3">
+                        <div class="mb-3 flex items-center justify-between gap-2 px-1">
+                            <h3 class="text-sm font-semibold">Vencimentos</h3>
+                            <span class="text-xs text-slate-500">{{ $invoices->count() }} faturas</span>
+                        </div>
+                        <div class="space-y-2">
+                            @forelse ($invoices as $row)
+                                @php
+                                    $entry = $row['invoice'];
+                                    $active = $selectedInvoice && $selectedInvoice['invoice']->id === $entry->id;
+                                    $paidOff = $row['remaining_cents'] === 0;
+                                    $partiallyPaid = $row['paid_cents'] > 0 && ! $paidOff;
+                                @endphp
+                                <button type="button" wire:key="select-invoice-{{ $entry->id }}"
+                                    wire:click="selectInvoice({{ $entry->id }})"
+                                    aria-pressed="{{ $active ? 'true' : 'false' }}"
+                                    class="w-full rounded-xl border p-3 text-left transition {{ $active ? 'border-sky-400 bg-sky-50 shadow-sm' : 'border-slate-200 bg-white hover:border-sky-300 hover:bg-slate-50' }}">
+                                    <span class="flex items-center justify-between gap-2">
+                                        <strong class="text-sm text-slate-900">{{ $entry->due_on->format('d/m/Y') }}</strong>
+                                        <span class="text-xs font-semibold {{ $paidOff ? 'text-emerald-700' : ($partiallyPaid ? 'text-amber-700' : 'text-slate-600') }}">
+                                            {{ $paidOff ? 'Quitada' : ($partiallyPaid ? 'Parcial' : ($entry->due_on->isPast() ? 'Vencida' : 'A vencer')) }}
+                                        </span>
+                                    </span>
+                                    <span class="mt-2 flex justify-between gap-2 text-xs text-slate-500">
+                                        <span>{{ $entry->installments->count() }} parcela(s)</span>
+                                        <span class="font-semibold tabular-nums text-slate-900">R$ {{ \App\Support\FinancialBalance::formatted($row['remaining_cents']) }}</span>
+                                    </span>
+                                    <span class="mt-2 block text-xs font-semibold {{ $active ? 'text-sky-700' : 'text-slate-500' }}">
+                                        {{ $active ? 'Detalhes abertos' : 'Consultar parcelas e pagar' }}
+                                    </span>
                                 </button>
-                            </div>
-                        </div>
-                    @empty
-                        <div class="px-6 py-10 text-center text-sm text-slate-500">
-                            Nenhuma fatura ainda. Registre compras na tela
-                            <a href="{{ route('gastos.index') }}" class="font-semibold text-sky-700 underline">Gastos</a>.
-                        </div>
-                    @endforelse
-                </div>
-            </div>
-        </section>
-
-        @if ($selectedInvoice)
-            @php
-                $current = $selectedInvoice['invoice'];
-                $open = $selectedInvoice['remaining_cents'];
-            @endphp
-            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                        <p class="text-sm font-semibold text-sky-700">Fatura selecionada</p>
-                        <h2 class="mt-1 text-xl font-semibold">Vencimento {{ $current->due_on->format('d/m/Y') }}</h2>
-                        <p class="mt-2 text-xs text-slate-500">Pagamento parcial não quita uma parcela específica; reduz o total devido na fatura.</p>
-                    </div>
-                    <div class="text-left sm:text-right">
-                        <p class="text-xs text-slate-500">Saldo em aberto</p>
-                        <p class="mt-1 text-2xl font-semibold tabular-nums">
-                            R$ {{ \App\Support\FinancialBalance::formatted($open) }}
-                        </p>
-                    </div>
-                </div>
-
-                <div class="mt-5 grid gap-2 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
-                    <div class="flex justify-between gap-2"><span class="text-slate-500">Parcelas do mês</span><strong>R$ {{ \App\Support\FinancialBalance::formatted($selectedInvoice['installments_cents']) }}</strong></div>
-                    <div class="flex justify-between gap-2"><span class="text-slate-500">Saldo anterior projetado</span><strong>R$ {{ \App\Support\FinancialBalance::formatted($selectedInvoice['carry_cents']) }}</strong></div>
-                    <div class="flex justify-between gap-2"><span class="text-slate-500">Juros/encargos manuais</span><strong>R$ {{ \App\Support\FinancialBalance::formatted($selectedInvoice['interest_cents']) }}</strong></div>
-                    <div class="flex justify-between gap-2"><span class="text-slate-500">Pagamentos registrados</span><strong>R$ {{ \App\Support\FinancialBalance::formatted($selectedInvoice['paid_cents']) }}</strong></div>
-                </div>
-
-                <h3 class="mt-6 text-base font-semibold">Compras e parcelas desta fatura</h3>
-                <div class="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-100">
-                    @forelse ($current->installments as $installment)
-                        <div wire:key="installment-{{ $installment->id }}" class="flex flex-wrap items-start justify-between gap-3 px-4 py-3 text-sm">
-                            <div>
-                                <p class="font-semibold text-slate-900">{{ $installment->purchase?->description ?? 'Compra' }}</p>
-                                <p class="mt-1 text-xs text-slate-500">
-                                    Parcela {{ $installment->installment_number }} de {{ $installment->purchase?->installments_count ?? '?' }}
-                                    · Compra em {{ $installment->purchase?->purchased_on?->format('d/m/Y') ?? '—' }}
+                            @empty
+                                <p class="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+                                    Nenhuma fatura ainda. <a href="{{ route('gastos.index') }}" class="underline">Registre uma compra em Gastos</a>.
                                 </p>
-                            </div>
-                            <span class="font-semibold tabular-nums">R$ {{ number_format((float) $installment->amount, 2, ',', '.') }}</span>
+                            @endforelse
                         </div>
-                    @empty
-                        <p class="px-4 py-4 text-sm text-slate-500">Nenhuma parcela nova nesta fatura. Pode existir saldo transportado de um mês anterior.</p>
-                    @endforelse
-                    @foreach ($current->charges as $charge)
-                        <div wire:key="interest-{{ $charge->id }}" class="flex flex-wrap items-start justify-between gap-3 px-4 py-3 text-sm">
-                            <div>
-                                <p class="font-semibold text-amber-800">{{ $charge->description }}</p>
-                                <p class="mt-1 text-xs text-slate-500">Juros/encargos incluídos manualmente</p>
-                            </div>
-                            <span class="font-semibold tabular-nums">R$ {{ number_format((float) $charge->amount, 2, ',', '.') }}</span>
-                        </div>
-                    @endforeach
-                </div>
+                    </aside>
 
-                <div class="mt-7 grid gap-5 lg:grid-cols-2">
+                    <section class="min-h-0 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 sm:p-5" aria-label="Detalhes da fatura">
+                        @if ($selectedInvoice)
+                            @php
+                                $current = $selectedInvoice['invoice'];
+                                $open = $selectedInvoice['remaining_cents'];
+                            @endphp
+                            <div wire:key="invoice-detail-{{ $current->id }}">
+                                <div class="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                        <p class="text-xs font-semibold text-sky-700">Detalhes da fatura</p>
+                                        <h3 class="mt-1 text-lg font-semibold">Vencimento {{ $current->due_on->format('d/m/Y') }}</h3>
+                                    </div>
+                                    <div class="sm:text-right">
+                                        <p class="text-xs text-slate-500">Ainda em aberto</p>
+                                        <p class="mt-1 text-xl font-semibold tabular-nums">
+                                            R$ {{ \App\Support\FinancialBalance::formatted($open) }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="mt-4 grid gap-2 rounded-xl bg-slate-50 p-4 text-xs sm:grid-cols-2">
+                                    <div class="flex justify-between gap-2"><span class="text-slate-500">Parcelas deste mês</span><strong>R$ {{ \App\Support\FinancialBalance::formatted($selectedInvoice['installments_cents']) }}</strong></div>
+                                    <div class="flex justify-between gap-2"><span class="text-slate-500">Saldo anterior</span><strong>R$ {{ \App\Support\FinancialBalance::formatted($selectedInvoice['carry_cents']) }}</strong></div>
+                                    <div class="flex justify-between gap-2"><span class="text-slate-500">Juros informados</span><strong>R$ {{ \App\Support\FinancialBalance::formatted($selectedInvoice['interest_cents']) }}</strong></div>
+                                    <div class="flex justify-between gap-2"><span class="text-slate-500">Pagamentos feitos</span><strong>R$ {{ \App\Support\FinancialBalance::formatted($selectedInvoice['paid_cents']) }}</strong></div>
+                                </div>
+                                <div class="mt-5 flex flex-wrap items-center justify-between gap-3">
+                                    <h4 class="text-sm font-semibold">Compras e parcelas desta fatura</h4>
+                                    @if ($advanceSelectable && $advanceOptions->isNotEmpty())
+                                        <span class="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+                                            Marque as parcelas para antecipar
+                                        </span>
+                                    @endif
+                                </div>
+                                <div class="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">
+                                    @forelse ($current->installments as $installment)
+                                        <div wire:key="invoice-installment-{{ $installment->id }}"
+                                             class="flex flex-wrap items-center justify-between gap-3 px-3 py-3 text-sm">
+                                            <div class="flex min-w-0 flex-1 items-center gap-3">
+                                                @if ($advanceSelectable && $installment->advance === null)
+                                                    <input type="checkbox" wire:model.live="advanceInstallmentIds"
+                                                        value="{{ $installment->id }}"
+                                                        aria-label="Antecipar parcela {{ $installment->installment_number }} de {{ $installment->purchase?->description ?? 'compra' }}"
+                                                        class="size-4 shrink-0 rounded border-slate-300 accent-slate-900">
+                                                @endif
+                                                <div class="min-w-0">
+                                                    <p class="break-words font-semibold text-slate-900">
+                                                        {{ $installment->purchase?->description ?? 'Compra' }}
+                                                    </p>
+                                                    <p class="mt-1 text-xs text-slate-500">
+                                                        Parcela {{ $installment->installment_number }} de {{ $installment->purchase?->installments_count ?? '?' }}
+                                                        · Compra em {{ $installment->purchase?->purchased_on?->format('d/m/Y') ?? '—' }}
+                                                    </p>
+                                                    @if ($installment->advance !== null)
+                                                        <p class="mt-1 text-xs font-semibold text-emerald-700">Antecipada e registrada no saldo</p>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            <strong class="tabular-nums">R$ {{ number_format((float) $installment->amount, 2, ',', '.') }}</strong>
+                                        </div>
+                                    @empty
+                                        <p class="px-4 py-4 text-sm text-slate-500">Nenhuma parcela nova. Pode haver saldo de meses anteriores.</p>
+                                    @endforelse
+                                    @foreach ($current->charges as $charge)
+                                        <div wire:key="invoice-charge-{{ $charge->id }}" class="flex justify-between gap-3 px-4 py-3 text-sm">
+                                            <div>
+                                                <p class="font-semibold text-amber-800">{{ $charge->description }}</p>
+                                                <p class="mt-1 text-xs text-slate-500">Juros/encargos registrados manualmente</p>
+                                            </div>
+                                            <strong class="tabular-nums">R$ {{ number_format((float) $charge->amount, 2, ',', '.') }}</strong>
+                                        </div>
+                                    @endforeach
+                                </div>
+
+                                @if ($advanceSelectable && $advanceOptions->isNotEmpty())
+                                    <form wire:submit="advanceSelectedInstallments"
+                                          class="mt-4 rounded-xl border border-sky-200 bg-sky-50/50 p-4">
+                                        <h4 class="font-semibold">Antecipar parcelas selecionadas</h4>
+                                        <p class="mt-1 text-xs leading-5 text-slate-600">
+                                            Selecione as parcelas acima e confirme o pagamento. Elas continuarão na fatura
+                                            do vencimento original, identificadas como antecipadas, sem duplicar despesas.
+                                        </p>
+                                        <p class="mt-3 text-lg font-semibold tabular-nums">
+                                            Total selecionado: R$ {{ \App\Support\FinancialBalance::formatted($advanceSelectedCents) }}
+                                        </p>
+                                        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                            <div>
+                                                <label for="advance-account" class="mb-1 block text-xs font-semibold">Conta pagadora</label>
+                                                <select id="advance-account" wire:model="advanceAccountId" required
+                                                        class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                                                    <option value="">Selecione a conta</option>
+                                                    @foreach ($accounts as $account)
+                                                        <option value="{{ $account->id }}">{{ $account->name }}</option>
+                                                    @endforeach
+                                                </select>
+                                                @error('advanceAccountId') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            </div>
+                                            <div>
+                                                <label for="advance-date" class="mb-1 block text-xs font-semibold">Data do pagamento</label>
+                                                <input id="advance-date" type="date" wire:model="advanceOn" max="{{ now()->toDateString() }}" required
+                                                       class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                                                @error('advanceOn') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            </div>
+                                        </div>
+                                        @error('advanceInstallmentIds') <p class="mt-2 text-xs font-semibold text-red-600">{{ $message }}</p> @enderror
+                                        <button type="submit" wire:loading.attr="disabled" wire:target="advanceSelectedInstallments"
+                                            @disabled($advanceSelectedCents === 0 || $accounts->isEmpty())
+                                            class="mt-3 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                                            Confirmar antecipação
+                                        </button>
+                                    </form>
+                                @endif
+
+                <div class="mt-6 grid gap-4 xl:grid-cols-2">
                     <div class="rounded-xl border border-slate-200 p-4 sm:p-5">
                         <h3 class="font-semibold">Registrar pagamento da fatura</h3>
                         <p class="mt-1 text-xs leading-5 text-slate-500">
@@ -359,7 +393,7 @@
                             <div wire:key="invoice-payment-line-{{ $payment->id }}" class="flex flex-wrap justify-between gap-3 px-4 py-3 text-sm">
                                 <div>
                                     <p class="font-medium text-slate-900">{{ $payment->paid_on->format('d/m/Y') }} · {{ $payment->financialAccount?->name ?? 'Conta indisponível' }}</p>
-                                    <p class="mt-1 text-xs text-slate-500">Pagamento efetivado</p>
+                                    <p class="mt-1 text-xs text-slate-500">{{ $payment->installmentAdvances->isNotEmpty() ? "Antecipação de ".$payment->installmentAdvances->count()." parcela(s)" : "Pagamento de fatura" }}</p>
                                 </div>
                                 <span class="font-semibold tabular-nums">R$ {{ number_format((float) $payment->amount, 2, ',', '.') }}</span>
                             </div>
@@ -368,9 +402,12 @@
                         @endforelse
                     </div>
                 </div>
-            </section>
-        @endif
-
+                            </div>
+                        @else
+                            <p class="py-10 text-center text-sm text-slate-500">Selecione um vencimento para consultar suas parcelas.</p>
+                        @endif
+                    </section>
+                </div>
             </div>
         </div>
     @endif
