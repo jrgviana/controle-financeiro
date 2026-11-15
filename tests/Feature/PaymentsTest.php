@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Livewire\DailyExpenses;
+use App\Livewire\FixedBills;
 use App\Livewire\Payments;
 use App\Models\AccountTransfer;
 use App\Models\CreditCard;
@@ -47,6 +48,21 @@ class PaymentsTest extends TestCase
             'planned_amount' => $amount,
             'starts_on' => '2026-11-01',
             'active' => true,
+        ]);
+    }
+
+    private function confirmMonthly(RecurringBill $plan, string $month = '2026-11', ?string $amount = null): ScheduledBill
+    {
+        $firstDay = CarbonImmutable::parse($month.'-01');
+
+        return ScheduledBill::create([
+            'user_id' => $plan->user_id,
+            'recurring_bill_id' => $plan->id,
+            'period_month' => $firstDay->toDateString(),
+            'description' => $plan->description,
+            'category' => $plan->category,
+            'due_on' => $firstDay->addDays(min($plan->due_day, $firstDay->daysInMonth) - 1)->toDateString(),
+            'amount' => $amount ?? $plan->planned_amount,
         ]);
     }
 
@@ -105,6 +121,7 @@ class PaymentsTest extends TestCase
         ]);
 
         $plan = $this->recurring($user);
+        $this->confirmMonthly($plan);
 
         Livewire::actingAs($user)->test(Payments::class)
             ->assertSee('Recebimentos do mês')
@@ -135,16 +152,16 @@ class PaymentsTest extends TestCase
         $user = User::factory()->create();
         $account = $this->account($user, '1000.00');
         $plan = $this->recurring($user, 'Água', '80.00', 10);
+        $this->confirmMonthly($plan, '2026-11');
 
         $view = Livewire::actingAs($user)->test(Payments::class)
             ->set('selectedMonth', '2026-12')
             ->assertSee('Água')
             ->assertSee('10/11/2026')
-            ->assertSee('10/12/2026')
-            ->assertSee('Vencida')
-            ->assertSee('A vencer');
+            ->assertDontSee('10/12/2026')
+            ->assertSee('Vencida');
 
-        $this->assertDatabaseCount('scheduled_bills', 0);
+        $this->assertDatabaseCount('scheduled_bills', 1);
 
         $view->call('openPayment', 'recurring:'.$plan->id.':2026-11')
             ->set('paymentAccountId', (string) $account->id)
@@ -155,8 +172,7 @@ class PaymentsTest extends TestCase
         $this->assertDatabaseCount('scheduled_bills', 1);
         $this->assertDatabaseHas('scheduled_bills', ['recurring_bill_id' => $plan->id, 'amount' => '80.00']);
         $rows = app(PaymentAgenda::class)->forMonth($user->id, '2026-12')['pending'];
-        $this->assertCount(1, $rows);
-        $this->assertSame('2026-12-10', $rows->first()['due_on']->toDateString());
+        $this->assertCount(0, $rows);
         $this->assertSame(92000, app(FinancialBalance::class)->currentCents($account));
     }
 
@@ -199,6 +215,7 @@ class PaymentsTest extends TestCase
         $user = User::factory()->create();
         $account = $this->account($user, '90.00');
         $plan = $this->recurring($user, 'Energia', '120.00');
+        $this->confirmMonthly($plan);
 
         Livewire::actingAs($user)->test(Payments::class)
             ->call('openPayment', 'recurring:'.$plan->id.':2026-11')
@@ -207,7 +224,7 @@ class PaymentsTest extends TestCase
             ->assertHasErrors(['paymentAmount'])
             ->assertSee('Saldo insuficiente');
 
-        $this->assertDatabaseCount('scheduled_bills', 0);
+        $this->assertDatabaseCount('scheduled_bills', 1);
         $this->assertDatabaseCount('daily_expenses', 0);
         $this->assertSame(9000, app(FinancialBalance::class)->currentCents($account));
     }
@@ -218,6 +235,7 @@ class PaymentsTest extends TestCase
         $user = User::factory()->create();
         $bank = $this->account($user, '1000.00');
         $plan = $this->recurring($user, 'Luz', '150.00');
+        $this->confirmMonthly($plan);
 
         Livewire::actingAs($user)->test(Payments::class)
             ->set('selectedMonth', '2026-11')
@@ -232,8 +250,7 @@ class PaymentsTest extends TestCase
         $this->assertSame('150.00', $plan->fresh()->planned_amount);
         $this->assertDatabaseHas('scheduled_bills', ['recurring_bill_id' => $plan->id, 'amount' => '177.45']);
         $rows = app(PaymentAgenda::class)->forMonth($user->id, '2026-12')['pending'];
-        $this->assertCount(1, $rows);
-        $this->assertSame(15000, $rows->first()['amount_cents']);
+        $this->assertCount(0, $rows);
         $this->assertSame(82255, app(FinancialBalance::class)->currentCents($bank));
     }
 
@@ -283,6 +300,7 @@ class PaymentsTest extends TestCase
         $first = $this->account($user, '300.00', 'Itaú');
         $second = $this->account($user, '0.00', 'Neon');
         $plan = $this->recurring($user, 'Condomínio', '250.00');
+        $this->confirmMonthly($plan);
 
         AccountTransfer::create([
             'user_id' => $user->id,
@@ -304,7 +322,7 @@ class PaymentsTest extends TestCase
             ->call('confirmPayment')
             ->assertHasErrors(['paymentAmount']);
 
-        $this->assertDatabaseCount('scheduled_bills', 0);
+        $this->assertDatabaseCount('scheduled_bills', 1);
         $this->assertDatabaseCount('daily_expenses', 0);
     }
 
@@ -316,12 +334,14 @@ class PaymentsTest extends TestCase
         $victimBank = $this->account($owner, '1000.00');
         $intruderBank = $this->account($intruder, '1000.00');
         $victimBill = $this->recurring($owner);
+        $this->confirmMonthly($victimBill);
 
         Livewire::actingAs($intruder)->test(Payments::class)
             ->call('openPayment', 'recurring:'.$victimBill->id.':2026-11')
             ->assertStatus(404);
 
         $own = $this->recurring($intruder, 'Internet', '100.00');
+        $this->confirmMonthly($own);
         Livewire::actingAs($intruder)->test(Payments::class)
             ->call('openPayment', 'recurring:'.$own->id.':2026-11')
             ->set('paymentAccountId', (string) $victimBank->id)
@@ -339,6 +359,7 @@ class PaymentsTest extends TestCase
         $user = User::factory()->create();
         $bank = $this->account($user, '500.00');
         $bill = $this->recurring($user, 'Energia', '316.75', 17);
+        $this->confirmMonthly($bill);
         $key = 'recurring:'.$bill->id.':2026-11';
 
         Livewire::actingAs($user)->test(Payments::class)
@@ -354,13 +375,13 @@ class PaymentsTest extends TestCase
             ->assertSee('R$ 316,75');
 
         $this->assertDatabaseCount('payment_postponements', 1);
-        $this->assertDatabaseCount('scheduled_bills', 0);
+        $this->assertDatabaseCount('scheduled_bills', 1);
         $this->assertDatabaseCount('daily_expenses', 0);
         $this->assertSame(50000, app(FinancialBalance::class)->currentCents($bank));
 
         $dec = app(PaymentAgenda::class)->forMonth($user->id, '2026-12');
-        $this->assertCount(2, $dec['pending']);
-        $this->assertSame(63350, $dec['pending_cents']);
+        $this->assertCount(1, $dec['pending']);
+        $this->assertSame(31675, $dec['pending_cents']);
         $this->assertSame('2026-11-17', $dec['pending']->first()['due_on']->toDateString());
 
         // Cada mês pode registrar outra decisão, mantendo o histórico.
@@ -370,11 +391,11 @@ class PaymentsTest extends TestCase
             ->call('confirmPostpone')
             ->assertHasNoErrors();
         $this->assertDatabaseCount('payment_postponements', 2);
-        $this->assertCount(1, app(PaymentAgenda::class)->forMonth($user->id, '2026-12')['pending']);
+        $this->assertCount(0, app(PaymentAgenda::class)->forMonth($user->id, '2026-12')['pending']);
 
         $jan = app(PaymentAgenda::class)->forMonth($user->id, '2027-01');
-        $this->assertCount(3, $jan['pending']);
-        $this->assertSame(95025, $jan['pending_cents']);
+        $this->assertCount(1, $jan['pending']);
+        $this->assertSame(31675, $jan['pending_cents']);
         $this->assertDatabaseCount('daily_expenses', 0);
     }
 
@@ -407,6 +428,7 @@ class PaymentsTest extends TestCase
         $user = User::factory()->create();
         $bank = $this->account($user, '1000.00');
         $plan = $this->recurring($user, 'Energia', '300.00', 10);
+        $this->confirmMonthly($plan);
         $key = 'recurring:'.$plan->id.':2026-11';
 
         Livewire::actingAs($user)->test(Payments::class)
@@ -432,7 +454,7 @@ class PaymentsTest extends TestCase
         $dec = app(PaymentAgenda::class)->forMonth($user->id, '2026-12');
         $this->assertSame(21675, $dec['pending']->first()['amount_cents']);
         $this->assertSame(10000, $dec['pending']->first()['paid_cents']);
-        $this->assertSame(30000, $dec['pending']->last()['amount_cents']);
+        $this->assertCount(1, $dec['pending']);
 
         Livewire::actingAs($user)->test(Payments::class)
             ->set('selectedMonth', '2026-12')
@@ -523,6 +545,99 @@ class PaymentsTest extends TestCase
             ->assertStatus(404);
 
         $this->assertDatabaseCount('payment_postponements', 0);
+    }
+
+    public function test_november_energy_paid_in_full_does_not_create_december_payment_until_confirmed(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
+        $user = User::factory()->create();
+        $bank = $this->account($user, '1000.00');
+        $plan = $this->recurring($user, 'Energia', '316.75', 17);
+        $this->confirmMonthly($plan, '2026-11');
+
+        Livewire::actingAs($user)->test(Payments::class)
+            ->call('openPayment', 'recurring:'.$plan->id.':2026-11')
+            ->set('paymentAccountId', (string) $bank->id)
+            ->set('paidOn', '2026-11-15')
+            ->call('confirmPayment')
+            ->assertHasNoErrors();
+
+        $this->assertSame(68325, app(FinancialBalance::class)->currentCents($bank));
+        $this->assertDatabaseCount('scheduled_bills', 1);
+        $this->assertNotNull(ScheduledBill::firstOrFail()->daily_expense_id);
+
+        Livewire::actingAs($user)->test(Payments::class)
+            ->set('selectedMonth', '2026-11')
+            ->assertViewHas('agenda', fn ($agenda) => $agenda['pending']->isEmpty())
+            ->assertSee('Energia')
+            ->set('selectedMonth', '2026-12')
+            ->assertDontSee('Energia')
+            ->assertViewHas('agenda', fn ($agenda) => $agenda['pending']->isEmpty())
+            ->assertSee('Preparar contas mensais')
+            ->assertSee('Nenhum compromisso confirmado pendente');
+
+        $this->assertSame(0, app(PaymentAgenda::class)->forMonth($user->id, '2026-12')['pending_cents']);
+
+        // O modelo recorrente ainda aparece como previsão, mas só se transforma
+        // em obrigação quando o valor do mês é confirmado explicitamente.
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2026-12')
+            ->assertSee('Energia')
+            ->assertSee('Previsão — confirme o valor para enviar a Pagamentos')
+            ->call('openOccurrence', $plan->id)
+            ->set('occurrenceAmount', 'R$ 325,40')
+            ->set('occurrenceDueOn', '2026-12-17')
+            ->call('saveOccurrence')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseCount('scheduled_bills', 2);
+        Livewire::actingAs($user)->test(Payments::class)
+            ->set('selectedMonth', '2026-12')
+            ->assertSee('Energia')
+            ->assertSee('R$ 325,40')
+            ->assertSee('17/12/2026');
+        $this->assertSame(68325, app(FinancialBalance::class)->currentCents($bank));
+    }
+
+    public function test_unconfirmed_monthly_template_does_not_become_an_overdue_debt(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2027-01-21 12:00'));
+        $user = User::factory()->create();
+        $plan = $this->recurring($user, 'Internet', '109.90', 10);
+
+        $this->assertDatabaseCount('scheduled_bills', 0);
+        foreach (['2026-11', '2026-12', '2027-01'] as $month) {
+            $agenda = app(PaymentAgenda::class)->forMonth($user->id, $month);
+            $this->assertCount(0, $agenda['pending'], "Sem confirmar cobrança: $month");
+            $this->assertSame(0, $agenda['pending_cents']);
+        }
+        $this->assertSame('109.90', $plan->fresh()->planned_amount);
+    }
+
+    public function test_existing_deferred_monthly_commitment_remains_due_after_rule_change(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-12-15 12:00'));
+        $user = User::factory()->create();
+        $plan = $this->recurring($user, 'Água', '89.90', 7);
+        // Histórico da versão antiga: era possível adiar recorrência ainda
+        // não confirmada, sem criar registro em scheduled_bills.
+        \App\Models\PaymentPostponement::create([
+            'user_id' => $user->id,
+            'payable_key' => 'recurring:'.$plan->id.':2026-11',
+            'from_month' => '2026-11-01',
+            'to_month' => '2026-12-01',
+            'description' => 'Água',
+            'remaining_amount' => '89.90',
+            'source' => 'manual',
+        ]);
+
+        $nov = app(PaymentAgenda::class)->forMonth($user->id, '2026-11');
+        $this->assertCount(0, $nov['pending']);
+
+        $dec = app(PaymentAgenda::class)->forMonth($user->id, '2026-12');
+        $this->assertCount(1, $dec['pending']);
+        $this->assertSame('2026-11-07', $dec['pending']->first()['due_on']->toDateString());
+        $this->assertSame(8990, $dec['pending_cents']);
     }
 
     public function test_payment_cannot_be_repeated_after_first_confirmation(): void

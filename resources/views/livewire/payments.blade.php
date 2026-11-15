@@ -104,7 +104,13 @@
                         </div>
                     </div>
                 @empty
-                    <p class="px-5 py-9 text-center text-sm text-slate-500">Nenhum compromisso pendente até o mês selecionado.</p>
+                    <div class="px-5 py-8 text-center text-sm text-slate-500">
+                        <p>Nenhum compromisso confirmado pendente até o mês selecionado.</p>
+                        <a href="{{ route('contas-fixas.index') }}"
+                           class="mt-2 inline-flex rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                            Preparar contas mensais
+                        </a>
+                    </div>
                 @endforelse
             </div>
         </div>

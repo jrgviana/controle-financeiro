@@ -110,7 +110,7 @@
                         <div class="font-semibold tabular-nums lg:col-span-2">
                             R$ {{ \App\Support\FinancialBalance::formatted($row['amount_cents']) }}
                             @unless ($bill)
-                                <p class="mt-1 text-xs font-normal text-slate-500">Valor previsto</p>
+                                <p class="mt-1 text-xs font-normal text-slate-500">Previsão — confirme o valor para enviar a Pagamentos</p>
                             @endunless
                         </div>
                         <div class="lg:col-span-1">
