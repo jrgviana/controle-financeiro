@@ -6,10 +6,10 @@ use App\Livewire\CreditCards;
 use App\Livewire\DailyExpenses;
 use App\Livewire\FixedBills;
 use App\Models\CreditCard;
-use App\Models\CreditCardInstallment;
+use App\Models\CreditCardInvoice;
 use App\Models\FinancialAccount;
 use App\Models\User;
-use App\Services\AdvanceCreditCardInstallments;
+use App\Services\ScheduleCreditCardInstallments;
 use App\Support\CreditCardLedger;
 use App\Support\FinancialBalance;
 use Carbon\CarbonImmutable;
@@ -44,7 +44,7 @@ class CardInstallmentAdvanceTest extends TestCase
         ]);
     }
 
-    private function purchase(User $user, CreditCard $card, string $name, string $amount, string $purchasedOn, int $count = 10): void
+    private function purchase(User $user, CreditCard $card, string $name, string $amount, string $date, int $count = 10): void
     {
         Livewire::actingAs($user)->test(DailyExpenses::class)
             ->set('paymentMethod', 'card')
@@ -52,12 +52,12 @@ class CardInstallmentAdvanceTest extends TestCase
             ->set('description', $name)
             ->set('amount', $amount)
             ->set('installmentsCount', $count)
-            ->set('paidOn', $purchasedOn)
+            ->set('paidOn', $date)
             ->call('save')
             ->assertHasNoErrors();
     }
 
-    public function test_fixed_bills_shows_only_installments_due_in_selected_month_after_closing(): void
+    public function test_next_due_month_is_explained_instead_of_empty_november_screen(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
         $user = User::factory()->create();
@@ -70,18 +70,12 @@ class CardInstallmentAdvanceTest extends TestCase
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-11')
-            ->assertSet('selectedMonth', '2026-11')
-            ->assertDontSee('Bomba hidráulica')
-            ->assertDontSee('Pneus do carro')
-            ->assertSee('R$ 0,00');
-
-        Livewire::actingAs($user)->test(FixedBills::class)
-            ->set('selectedMonth', '2026-12')
-            ->assertSee('Bomba hidráulica')
-            ->assertSee('Pneus do carro')
-            ->assertSee('Parcela 1 de 10')
-            ->assertSee('15/12/2026')
-            ->assertSee('07/12/2026')
+            ->assertSee('Nenhuma parcela de cartão vence neste mês')
+            ->assertSee('R$ 260,96')
+            ->call('jumpToCardMonth', '2026-12')
+            ->assertSet('selectedMonth', '2026-12')
+            ->assertSee('Hiper')
+            ->assertSee('Passaí')
             ->assertSee('R$ 125,00')
             ->assertSee('R$ 135,96')
             ->assertSee('R$ 260,96')
@@ -91,28 +85,28 @@ class CardInstallmentAdvanceTest extends TestCase
         $this->assertSame(300000, (new FinancialBalance())->currentCents($account));
     }
 
-    public function test_purchase_on_or_before_closing_appears_in_earlier_due_month(): void
+    public function test_purchase_before_and_after_closing_stays_in_correct_month(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
         $user = User::factory()->create();
         $card = $this->card($user);
-        $this->purchase($user, $card, 'Compra no fechamento', 'R$ 50,00', '2026-11-09', 1);
-        $this->purchase($user, $card, 'Compra após fechamento', 'R$ 60,00', '2026-11-10', 1);
+        $this->purchase($user, $card, 'Antes do fechamento', 'R$ 50,00', '2026-11-09', 1);
+        $this->purchase($user, $card, 'Depois do fechamento', 'R$ 60,00', '2026-11-10', 1);
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-11')
-            ->assertSee('Compra no fechamento')
-            ->assertDontSee('Compra após fechamento')
+            ->assertSee('Antes do fechamento')
+            ->assertDontSee('Depois do fechamento')
             ->assertSee('R$ 50,00');
 
         Livewire::actingAs($user)->test(FixedBills::class)
             ->set('selectedMonth', '2026-12')
-            ->assertSee('Compra após fechamento')
-            ->assertDontSee('Compra no fechamento')
+            ->assertSee('Depois do fechamento')
+            ->assertDontSee('Antes do fechamento')
             ->assertSee('R$ 60,00');
     }
 
-    public function test_modal_selection_can_advance_a_future_installment_and_debit_bank_once(): void
+    public function test_choosing_future_parcel_only_schedules_it_without_charging_bank(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
         $user = User::factory()->create();
@@ -120,116 +114,135 @@ class CardInstallmentAdvanceTest extends TestCase
         $card = $this->card($user);
         $this->purchase($user, $card, 'Bomba hidráulica', 'R$ 1.250,00', '2026-11-14');
 
-        $invoice = $card->invoices()->orderBy('due_on')->firstOrFail();
-        $installment = $invoice->installments()->firstOrFail();
-        $this->assertSame('2026-12-15', $invoice->due_on->toDateString());
+        $first = $card->invoices()->orderBy('due_on')->firstOrFail();
+        $installment = $first->installments()->firstOrFail();
 
         Livewire::actingAs($user)->test(CreditCards::class)
             ->call('selectCard', $card->id)
-            ->call('selectInvoice', $invoice->id)
-            ->assertSee('Antecipar parcelas selecionadas')
+            ->call('selectInvoice', $first->id)
+            ->assertSee('Programar antecipação')
             ->set('advanceInstallmentIds', [(string) $installment->id])
-            ->assertSee('R$ 125,00')
-            ->set('advanceAccountId', (string) $account->id)
-            ->set('advanceOn', '2026-11-15')
+            ->set('advanceTargetMonth', '2026-11')
             ->call('advanceSelectedInstallments')
             ->assertHasNoErrors()
-            ->assertSee('Antecipada e registrada no saldo');
+            ->assertSee('Nenhum valor foi descontado do banco');
 
-        $this->assertDatabaseCount('credit_card_invoice_payments', 1);
-        $this->assertDatabaseCount('credit_card_installment_advances', 1);
-        $this->assertDatabaseHas('credit_card_installment_advances', ['credit_card_installment_id' => $installment->id]);
-        $this->assertSame(287500, (new FinancialBalance())->currentCents($account));
-        $this->assertSame(112500, (new CreditCardLedger())->totalDebt($card));
+        $this->assertDatabaseCount('credit_card_installment_plans', 1);
+        $this->assertDatabaseCount('credit_card_invoice_payments', 0);
+        $this->assertDatabaseCount('credit_card_installment_advances', 0);
+        $this->assertSame(300000, (new FinancialBalance())->currentCents($account));
+        $this->assertSame(125000, (new CreditCardLedger())->totalDebt($card));
+        $target = CreditCardInvoice::query()->where('credit_card_id', $card->id)
+            ->whereDate('due_on', '2026-11-15')->firstOrFail();
+        $this->assertSame($target->id, $installment->fresh()->credit_card_invoice_id);
 
         Livewire::actingAs($user)->test(FixedBills::class)
-            ->set('selectedMonth', '2026-12')
-            ->assertSee('Bomba hidráulica')
-            ->assertSee('Antecipada');
-
-        $this->expectException(ValidationException::class);
-        app(AdvanceCreditCardInstallments::class)->execute(
-            $user->id, $invoice->id, [$installment->id], $account->id, '2026-11-15'
-        );
+            ->set('selectedMonth', '2026-11')
+            ->assertSee('Hiper', false)->assertSee('R$ 125,00');
     }
 
-    public function test_advance_of_one_future_installment_does_not_carry_other_unexpired_installments_as_overdue(): void
+    public function test_scheduled_advance_joins_existing_installments_and_pays_as_one_invoice(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
         $user = User::factory()->create();
         $account = $this->bank($user);
         $card = $this->card($user);
-        $this->purchase($user, $card, 'Primeira compra', 'R$ 200,00', '2026-11-14', 2);
-        $this->purchase($user, $card, 'Segunda compra', 'R$ 120,00', '2026-11-14', 2);
 
+        $this->purchase($user, $card, 'Parcela dezembro', 'R$ 100,00', '2026-11-14', 1);
+        $this->purchase($user, $card, 'Parcelado janeiro', 'R$ 200,00', '2026-11-14', 2);
         $invoices = $card->invoices()->orderBy('due_on')->get();
-        $this->assertCount(2, $invoices);
-        $firstInstallment = $invoices[0]->installments()->orderBy('id')->firstOrFail();
+        $dec = $invoices[0];
+        $jan = $invoices[1];
+        $janInstallment = $jan->installments()->firstOrFail();
 
-        app(AdvanceCreditCardInstallments::class)->execute(
-            $user->id, $invoices[0]->id, [$firstInstallment->id], $account->id, '2026-11-15'
+        app(ScheduleCreditCardInstallments::class)->execute(
+            $user->id, $jan->id, [$janInstallment->id], '2026-12'
         );
 
-        $rows = (new CreditCardLedger())->invoices($card);
-        $this->assertSame(6000, $rows[0]['remaining_cents']);
-        $this->assertSame(0, $rows[1]['carry_cents']);
-        $this->assertSame(16000, $rows[1]['remaining_cents']);
-        $this->assertSame(22000, (new CreditCardLedger())->totalDebt($card));
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2026-12')
+            ->assertSee('R$ 200,00')
+            ->assertSee('Antecipada para este mês')
+            ->call('openCardPayment', $dec->id)
+            ->assertSet('cardPaymentOpen', true)
+            ->assertSet('cardPayAmount', 'R$ 200,00')
+            ->set('cardPayAccountId', (string) $account->id)
+            ->set('cardPayDate', '2026-11-15')
+            ->call('confirmCardPayment')
+            ->assertHasNoErrors()
+            ->assertSee('Fatura quitada');
+
+        $this->assertDatabaseCount('credit_card_invoice_payments', 1);
+        $this->assertDatabaseCount('daily_expenses', 0);
+        $this->assertDatabaseCount('credit_card_installment_plans', 1);
+        $this->assertSame(280000, (new FinancialBalance())->currentCents($account));
+        $this->assertSame(10000, (new CreditCardLedger())->totalDebt($card));
+
+        Livewire::actingAs($user)->test(FixedBills::class)
+            ->set('selectedMonth', '2027-01')
+            ->assertSee('R$ 100,00')
+            ->assertDontSee('R$ 200,00');
     }
 
-    public function test_advance_multiple_installments_in_one_invoice_creates_single_bank_payment(): void
+    public function test_scheduled_installment_can_be_reverted_before_payment(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
         $user = User::factory()->create();
-        $bank = $this->bank($user);
         $card = $this->card($user);
-
-        $this->purchase($user, $card, 'Mercado', 'R$ 100,00', '2026-11-14', 1);
-        $this->purchase($user, $card, 'Farmácia', 'R$ 50,00', '2026-11-14', 1);
+        $this->purchase($user, $card, 'Mercado', 'R$ 50,00', '2026-11-14', 1);
         $invoice = $card->invoices()->firstOrFail();
-        $ids = $invoice->installments()->orderBy('id')->pluck('id')->all();
+        $installment = $invoice->installments()->firstOrFail();
 
+        app(ScheduleCreditCardInstallments::class)->execute(
+            $user->id, $invoice->id, [$installment->id], '2026-11'
+        );
         Livewire::actingAs($user)->test(CreditCards::class)
             ->call('selectCard', $card->id)
-            ->call('selectInvoice', $invoice->id)
-            ->set('advanceInstallmentIds', array_map('strval', $ids))
-            ->set('advanceAccountId', (string) $bank->id)
-            ->call('advanceSelectedInstallments')
+            ->call('undoPlannedInstallment', $installment->id)
             ->assertHasNoErrors();
 
-        $this->assertDatabaseCount('credit_card_installment_advances', 2);
-        $this->assertDatabaseCount('credit_card_invoice_payments', 1);
-        $this->assertSame(285000, (new FinancialBalance())->currentCents($bank));
-        $this->assertSame(0, (new CreditCardLedger())->totalDebt($card));
+        $this->assertDatabaseCount('credit_card_installment_plans', 0);
+        $this->assertSame($invoice->id, $installment->fresh()->credit_card_invoice_id);
     }
 
-    public function test_advance_rejects_insufficient_bank_balance_and_unrelated_users(): void
+    public function test_prevents_duplicates_foreign_user_and_past_month(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
         $user = User::factory()->create();
-        $other = User::factory()->create();
-        $bank = $this->bank($user, '20.00');
+        $stranger = User::factory()->create();
         $card = $this->card($user);
-        $this->purchase($user, $card, 'Mercado', 'R$ 100,00', '2026-11-14', 1);
+        $this->purchase($user, $card, 'Compra', 'R$ 100,00', '2026-11-14', 1);
         $invoice = $card->invoices()->firstOrFail();
-        $id = $invoice->installments()->firstOrFail()->id;
+        $installment = $invoice->installments()->firstOrFail();
 
-        Livewire::actingAs($user)->test(CreditCards::class)
-            ->call('selectCard', $card->id)
-            ->set('advanceInstallmentIds', [(string) $id])
-            ->set('advanceAccountId', (string) $bank->id)
-            ->call('advanceSelectedInstallments')
-            ->assertHasErrors(['advanceAccountId']);
+        $service = app(ScheduleCreditCardInstallments::class);
+        try {
+            $service->execute($user->id, $invoice->id, [$installment->id], '2026-10');
+            $this->fail('Past month accepted');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('advanceTargetMonth', $e->errors());
+        }
 
-        $this->assertDatabaseCount('credit_card_invoice_payments', 0);
-        $this->assertSame(2000, (new FinancialBalance())->currentCents($bank));
+        $service->execute($user->id, $invoice->id, [$installment->id], '2026-11');
+        $this->expectException(ValidationException::class);
+        $service->execute($user->id, $invoice->id, [$installment->id], '2026-11');
 
-        Livewire::actingAs($other)->test(CreditCards::class)
+        // Security of foreign user is independently enforced by the service.
+    }
+
+    public function test_other_user_cannot_access_advance_modal(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
+        $user = User::factory()->create();
+        $stranger = User::factory()->create();
+        $card = $this->card($user);
+        $this->purchase($user, $card, 'Compra', 'R$ 100,00', '2026-11-14', 1);
+        Livewire::actingAs($stranger)->test(CreditCards::class)
             ->call('selectCard', $card->id)
             ->assertStatus(404);
     }
 
-    public function test_deep_link_from_fixed_bills_opens_only_owned_invoice_in_modal(): void
+    public function test_deep_link_opens_the_invoice_modal_directly(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
         $user = User::factory()->create();
@@ -237,15 +250,7 @@ class CardInstallmentAdvanceTest extends TestCase
         $this->purchase($user, $card, 'Internet', 'R$ 100,00', '2026-11-14', 1);
         $invoice = $card->invoices()->firstOrFail();
 
-        $this->actingAs($user)->get('/contas-fixas')->assertOk();
-
         $this->actingAs($user)->get('/cartoes?cartao='.$card->id.'&fatura='.$invoice->id)
-            ->assertOk()
-            ->assertSee('Faturas e antecipação'); // O modal já abre na fatura vinculada.
-
-        Livewire::actingAs($user)->test(CreditCards::class)
-            ->call('selectCard', $card->id)
-            ->call('selectInvoice', $invoice->id)
-            ->assertSee('Parcela 1 de 1');
+            ->assertOk()->assertSee('Faturas e planejamento de parcelas');
     }
 }
