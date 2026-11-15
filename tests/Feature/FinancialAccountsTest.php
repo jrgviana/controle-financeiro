@@ -126,7 +126,10 @@ class FinancialAccountsTest extends TestCase
             ->assertSee('Contas cadastradas')
             ->assertSee('Saldo inicial')
             ->assertSee('Conta principal')
-            ->assertSeeHtml('<table');
+            ->assertSee('Entradas')
+            ->assertSee('Saídas')
+            ->assertSee('Disponível')
+            ->assertDontSee('overflow-x-auto');
     }
 
     public function test_accounts_page_renders_transfers_and_available_balance(): void
