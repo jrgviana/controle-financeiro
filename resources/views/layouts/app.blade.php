@@ -22,6 +22,7 @@
                 <nav class="flex items-center gap-1 text-sm" aria-label="Menu principal">
                     <a href="{{ route('dashboard') }}" class="rounded-lg px-3 py-2 font-medium transition hover:bg-slate-100 {{ request()->routeIs('dashboard') ? 'bg-slate-100 text-slate-950' : 'text-slate-600' }}">Visão geral</a>
                     <a href="{{ route('contas.index') }}" class="rounded-lg px-3 py-2 font-medium transition hover:bg-slate-100 {{ request()->routeIs('contas.*') ? 'bg-slate-100 text-slate-950' : 'text-slate-600' }}">Contas</a>
+                    <a href="{{ route('gastos.index') }}" class="rounded-lg px-3 py-2 font-medium transition hover:bg-slate-100 {{ request()->routeIs('gastos.*') ? 'bg-slate-100 text-slate-950' : 'text-slate-600' }}">Gastos diários</a>
                 </nav>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf

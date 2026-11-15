@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class FinancialAccount extends Model
 {
@@ -22,6 +23,11 @@ class FinancialAccount extends Model
             'initial_balance' => 'decimal:2',
             'active' => 'boolean',
         ];
+    }
+
+    public function dailyExpenses(): HasMany
+    {
+        return $this->hasMany(DailyExpense::class);
     }
 
     public function user(): BelongsTo
