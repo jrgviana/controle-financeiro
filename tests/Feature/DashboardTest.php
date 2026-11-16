@@ -106,6 +106,11 @@ class DashboardTest extends TestCase
         $this->assertSame(88000, $overview['cash_difference_cents']);
         $this->assertSame(120000, $overview['card_debt_cents']);
         $this->assertSame(120000, $overview['card_purchases_cents']);
+        $this->assertSame(120000, $overview['card_categories']->first()['cents']);
+        $this->assertSame('Compras', $overview['card_categories']->first()['name']);
+        $this->assertSame(100, $overview['card_categories']->first()['percent']);
+        $this->assertSame(1, $overview['card_categories']->first()['count']);
+        $this->assertSame('Compra parcelada', $overview['recent_card_purchases']->first()->description);
         $this->assertSame(80000, $overview['cards']->first()['remaining_cents']);
         $this->assertSame(60, $overview['cards']->first()['usage_pct']);
         $this->assertSame(0, $overview['pending_cents']);
@@ -119,6 +124,112 @@ class DashboardTest extends TestCase
             ->assertSee('R$ 120,00')->assertSee('R$ 1.200,00')
             ->assertSee('Platinum')->assertSee('R$ 800,00')
             ->assertSee('Compras no cartão neste mês');
+    }
+
+    public function test_dashboard_shows_exact_destinations_of_card_purchases_without_mixing_paid_expenses(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
+        $user = User::factory()->create();
+        $bank = $this->account($user, 'Itaú', '2500.00');
+        $this->spent($user, $bank, '150.00');
+
+        $card = CreditCard::create([
+            'user_id' => $user->id,
+            'name' => 'Cartão Passaí',
+            'credit_limit' => '2500.00',
+            'closing_day' => 7,
+            'due_day' => 13,
+            'active' => true,
+        ]);
+
+        // A compra inteira entra na categoria no mês da COMPRA. A quantidade
+        // de parcelas não multiplica nem reduz o valor desta análise.
+        app(RecordCreditCardPurchase::class)->execute(
+            $user->id, $card->id, '2026-11-12', 'Pneus do carro',
+            'transporte', 120000, 10
+        );
+        app(RecordCreditCardPurchase::class)->execute(
+            $user->id, $card->id, '2026-11-14', 'Farmácia',
+            'saude', 30000, 1
+        );
+
+        $overview = app(DashboardOverview::class)
+            ->build($user->id, CarbonImmutable::parse('2026-11-01'));
+
+        $this->assertSame(235000, $overview['balance_cents']);
+        $this->assertSame(15000, $overview['paid_cents']);
+        $this->assertSame(15000, $overview['expense_categories_cents']);
+        $this->assertSame('Alimentação', $overview['categories']->first()['name']);
+        $this->assertCount(1, $overview['categories']);
+
+        $this->assertSame(150000, $overview['card_purchases_cents']);
+        $this->assertSame(2, $overview['card_purchases_count']);
+        $this->assertCount(2, $overview['card_categories']);
+        $this->assertSame('Transporte', $overview['card_categories'][0]['name']);
+        $this->assertSame(120000, $overview['card_categories'][0]['cents']);
+        $this->assertSame(80, $overview['card_categories'][0]['percent']);
+        $this->assertSame('Saúde', $overview['card_categories'][1]['name']);
+        $this->assertSame(30000, $overview['card_categories'][1]['cents']);
+        $this->assertSame(20, $overview['card_categories'][1]['percent']);
+        $this->assertSame(150000, $overview['card_debt_cents']);
+        $this->assertSame('Farmácia', $overview['recent_card_purchases'][0]->description);
+        $this->assertSame('Cartão Passaí', $overview['recent_card_purchases'][0]->card->name);
+
+        $this->actingAs($user)->get('/dashboard')
+            ->assertOk()
+            ->assertSee('Pagamentos diretos')
+            ->assertSee('Compras no cartão')
+            ->assertSee('Gastos já pagos pelas contas')
+            ->assertSee('R$ 1.500,00')
+            ->assertSee('Transporte')
+            ->assertSee('Saúde')
+            ->assertSee('Pneus do carro')
+            ->assertSee('Farmácia')
+            ->assertSee('Cartão Passaí');
+    }
+
+    public function test_card_category_data_respects_month_and_user_scopes(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-15 12:00'));
+        $owner = User::factory()->create();
+        $viewer = User::factory()->create();
+
+        $card = CreditCard::create([
+            'user_id' => $owner->id,
+            'name' => 'Cartão particular',
+            'credit_limit' => '1000.00',
+            'closing_day' => 9,
+            'due_day' => 15,
+            'active' => true,
+        ]);
+
+        app(RecordCreditCardPurchase::class)->execute(
+            $owner->id, $card->id, '2026-10-08', 'Compra de outubro',
+            'lazer', 12000, 2
+        );
+        app(RecordCreditCardPurchase::class)->execute(
+            $owner->id, $card->id, '2026-11-11', 'Compra de novembro',
+            'educacao', 24000, 3
+        );
+
+        $october = app(DashboardOverview::class)
+            ->build($owner->id, CarbonImmutable::parse('2026-10-01'));
+        $november = app(DashboardOverview::class)
+            ->build($owner->id, CarbonImmutable::parse('2026-11-01'));
+        $other = app(DashboardOverview::class)
+            ->build($viewer->id, CarbonImmutable::parse('2026-11-01'));
+
+        $this->assertSame(12000, $october['card_purchases_cents']);
+        $this->assertSame('Lazer', $october['card_categories']->first()['name']);
+        $this->assertSame(24000, $november['card_purchases_cents']);
+        $this->assertSame('Educação', $november['card_categories']->first()['name']);
+        $this->assertSame(0, $other['card_purchases_cents']);
+        $this->assertCount(0, $other['card_categories']);
+        $this->assertCount(0, $other['recent_card_purchases']);
+        $this->actingAs($viewer)->get('/dashboard')
+            ->assertOk()
+            ->assertDontSee('Cartão particular')
+            ->assertDontSee('Compra de novembro');
     }
 
     public function test_unconfirmed_monthly_forecast_does_not_create_a_payable_until_confirmed(): void
@@ -191,6 +302,8 @@ class DashboardTest extends TestCase
         $this->assertSame(10000, $overview['paid_cents']);
         $this->assertSame(20000, $overview['card_debt_cents']);
         $this->assertSame(30000, $overview['card_purchases_cents']);
+        $this->assertSame(30000, $overview['card_categories']->first()['cents']);
+        $this->assertSame(100, $overview['card_categories']->first()['percent']);
         $this->assertSame(0, $overview['income_cents']);
         $this->assertSame(0, $overview['expense_categories_cents']);
     }
