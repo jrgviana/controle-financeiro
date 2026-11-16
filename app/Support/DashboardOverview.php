@@ -82,20 +82,7 @@ class DashboardOverview
         $monthExpenses = $expenses->filter(
             fn ($expense) => $expense->paid_on->format('Y-m') === $month->format('Y-m')
         );
-        $allCategories = $monthExpenses->groupBy('category')->map(
-            fn ($items, $category) => [
-                'key' => $category,
-                'name' => DailyExpenses::CATEGORIES[$category] ?? 'Outros',
-                'cents' => $items->sum(fn ($expense) => FinancialBalance::cents($expense->amount)),
-            ]
-        )->sortByDesc('cents')->values();
-
-        $categoryTotal = max(1, (int) $allCategories->sum('cents'));
-        $categories = $allCategories->take(6)->values()->map(fn ($row, $index) => [
-            ...$row,
-            'color' => self::CHART_COLORS[$index],
-            'percent' => (int) round($row['cents'] / $categoryTotal * 100),
-        ]);
+        $categories = $this->spendingCategories($monthExpenses);
 
         // Parcelas futuras compõem dívida de cartão, mas não saída financeira
         // do mês. Limite e saldo em conta também nunca são somados.
@@ -122,7 +109,17 @@ class DashboardOverview
         $purchasesMonth = CreditCardPurchase::query()
             ->where('user_id', $userId)
             ->whereBetween('purchased_on', [$from, $through])
-            ->get(['id', 'amount']);
+            ->with('card:id,name')
+            ->get(['id', 'credit_card_id', 'purchased_on', 'description', 'category', 'amount']);
+
+        // Destino das compras no crédito é calculado pelo valor TOTAL das
+        // compras na data de realização, não pela parcela da fatura. Isso
+        // informa hábitos de compra sem duplicar os pagamentos das faturas.
+        $cardCategories = $this->spendingCategories($purchasesMonth);
+        $recentCardPurchases = $purchasesMonth
+            ->sortByDesc(fn ($purchase) => $purchase->purchased_on->format('Ymd')
+                .'-'.str_pad((string) $purchase->id, 12, '0', STR_PAD_LEFT))
+            ->take(4)->values();
 
         $confirmedRecurringIds = ScheduledBill::query()
             ->where('user_id', $userId)
@@ -179,6 +176,8 @@ class DashboardOverview
                 fn ($purchase) => FinancialBalance::cents($purchase->amount)
             ),
             'card_purchases_count' => $purchasesMonth->count(),
+            'card_categories' => $cardCategories,
+            'recent_card_purchases' => $recentCardPurchases,
             'forecast_cents' => $unconfirmedForecasts->sum(
                 fn ($row) => FinancialBalance::cents($row->planned_amount)
             ),
@@ -193,6 +192,34 @@ class DashboardOverview
             'recent_movements' => $agenda['movements']->take(7)->values(),
             'next_card_due' => $agenda['next_card_due'],
         ];
+    }
+
+    /**
+     * Aplica a mesma classificação às despesas já pagas e às compras no
+     * cartão. Os conjuntos nunca são agregados entre si: o pagamento de
+     * uma fatura é fluxo de caixa, a compra é consumo por categoria.
+     */
+    private function spendingCategories(Collection $items): Collection
+    {
+        $totalCents = max(1, (int) $items->sum(
+            fn ($item) => FinancialBalance::cents($item->amount)
+        ));
+
+        return $items->groupBy(fn ($item) => $item->category ?: 'outros')
+            ->map(fn ($group, $category) => [
+                'key' => $category,
+                'name' => DailyExpenses::CATEGORIES[$category] ?? 'Outros',
+                'cents' => (int) $group->sum(
+                    fn ($item) => FinancialBalance::cents($item->amount)
+                ),
+                'count' => $group->count(),
+            ])
+            ->sortByDesc('cents')->values()
+            ->map(fn ($entry, $index) => [
+                ...$entry,
+                'color' => self::CHART_COLORS[$index % count(self::CHART_COLORS)],
+                'percent' => (int) round($entry['cents'] * 100 / $totalCents),
+            ]);
     }
 
     private function groupByMonth(Collection $items, string $dateField): array
