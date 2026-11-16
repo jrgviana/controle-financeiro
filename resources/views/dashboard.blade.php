@@ -163,31 +163,95 @@
             <div class="finance-section-head">
                 <div>
                     <h2 class="finance-section-title">Onde seu dinheiro foi gasto</h2>
-                    <p class="finance-subtitle mt-1">Despesas pagas por categoria, sem repetir faturas dos cartões.</p>
+                    <p class="finance-subtitle mt-1">Destino dos gastos por categoria, separando contas pagas e compras no cartão.</p>
                 </div>
-                <span class="finance-small-tag bg-indigo-50 text-indigo-700">{{ $money($dashboard['expense_categories_cents']) }}</span>
             </div>
-            @if ($dashboard['categories']->isNotEmpty())
-                <div class="mt-6 space-y-4">
-                    @foreach ($dashboard['categories'] as $category)
-                        <div>
-                            <div class="mb-2 flex items-center justify-between gap-3 text-xs">
-                                <span class="flex min-w-0 items-center gap-2 font-semibold text-slate-700">
-                                    <span class="size-2.5 shrink-0 rounded-full" style="background: {{ $category['color'] }}"></span>
-                                    <span class="truncate">{{ $category['name'] }}</span>
-                                </span>
-                                <span class="shrink-0 font-bold tabular-nums text-slate-800">{{ $money($category['cents']) }}</span>
-                            </div>
-                            <div class="finance-account-progress">
-                                <span style="width: {{ max(1, $category['percent']) }}%; background: {{ $category['color'] }}"></span>
-                            </div>
-                        </div>
-                    @endforeach
+
+            <div class="mt-5 rounded-2xl border border-teal-100 bg-teal-50/50 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h3 class="text-sm font-bold text-slate-800">Pagamentos diretos</h3>
+                    <span class="finance-small-tag bg-white text-teal-800">{{ $money($dashboard['expense_categories_cents']) }}</span>
                 </div>
-            @else
-                <div class="finance-empty mt-6">Sem gastos pagos classificados neste período.</div>
-            @endif
-            <a href="{{ route('gastos.index') }}" class="mt-6 inline-flex text-xs font-bold text-indigo-700 hover:underline">Consultar meus gastos ↗</a>
+                <p class="mt-1 text-xs text-slate-500">Gastos já pagos pelas contas, sem pagamentos de fatura.</p>
+                @if ($dashboard['categories']->isNotEmpty())
+                    <div class="mt-4 space-y-3.5">
+                        @foreach ($dashboard['categories'] as $category)
+                            <div>
+                                <div class="mb-1.5 flex items-center justify-between gap-3 text-xs">
+                                    <span class="flex min-w-0 items-center gap-2 font-semibold text-slate-700">
+                                        <span class="size-2.5 shrink-0 rounded-full" style="background: {{ $category['color'] }}"></span>
+                                        <span class="truncate">{{ $category['name'] }}</span>
+                                    </span>
+                                    <span class="shrink-0 font-bold tabular-nums text-slate-800">
+                                        {{ $money($category['cents']) }}
+                                        <span class="font-normal text-slate-500">({{ $category['percent'] }}%)</span>
+                                    </span>
+                                </div>
+                                <div class="finance-account-progress">
+                                    <span style="width: {{ max(1, $category['percent']) }}%; background: {{ $category['color'] }}"></span>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="mt-4 text-xs text-slate-500">Nenhum gasto pago neste mês.</p>
+                @endif
+            </div>
+
+            <div class="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h3 class="text-sm font-bold text-slate-800">Compras no cartão</h3>
+                    <span class="finance-small-tag bg-white text-indigo-800">{{ $money($dashboard['card_purchases_cents']) }}</span>
+                </div>
+                <p class="mt-1 text-xs text-slate-500">
+                    {{ $dashboard['card_purchases_count'] }} compra(s) · valor integral, mesmo quando parcelado.
+                </p>
+                @if ($dashboard['card_categories']->isNotEmpty())
+                    <div class="mt-4 space-y-3.5">
+                        @foreach ($dashboard['card_categories'] as $category)
+                            <div>
+                                <div class="mb-1.5 flex items-center justify-between gap-3 text-xs">
+                                    <span class="flex min-w-0 items-center gap-2 font-semibold text-slate-700">
+                                        <span class="size-2.5 shrink-0 rounded-full" style="background: {{ $category['color'] }}"></span>
+                                        <span class="truncate">{{ $category['name'] }}</span>
+                                    </span>
+                                    <span class="shrink-0 font-bold tabular-nums text-slate-800">
+                                        {{ $money($category['cents']) }}
+                                        <span class="font-normal text-slate-500">({{ $category['percent'] }}%)</span>
+                                    </span>
+                                </div>
+                                <div class="finance-account-progress">
+                                    <span style="width: {{ max(1, $category['percent']) }}%; background: {{ $category['color'] }}"></span>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+
+                    <div class="mt-4 border-t border-indigo-100 pt-3">
+                        <p class="text-xs font-bold text-slate-700">Últimas compras realizadas</p>
+                        <div class="mt-1 divide-y divide-indigo-100/70">
+                            @foreach ($dashboard['recent_card_purchases'] as $purchase)
+                                <div class="flex min-w-0 items-start justify-between gap-2 py-2.5 text-xs">
+                                    <div class="min-w-0">
+                                        <p class="break-words font-semibold text-slate-700">{{ $purchase->description }}</p>
+                                        <p class="mt-0.5 text-slate-500">
+                                            {{ $purchase->card?->name ?? 'Cartão' }} ·
+                                            {{ \Carbon\CarbonImmutable::parse($purchase->purchased_on)->format('d/m') }}
+                                        </p>
+                                    </div>
+                                    <span class="shrink-0 font-bold tabular-nums text-slate-800">
+                                        {{ $money(\App\Support\FinancialBalance::cents($purchase->amount)) }}
+                                    </span>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @else
+                    <p class="mt-4 text-xs text-slate-500">Nenhuma compra no cartão neste mês.</p>
+                @endif
+            </div>
+
+            <a href="{{ route('gastos.index') }}" class="mt-5 inline-flex text-xs font-bold text-indigo-700 hover:underline">Consultar lançamentos ↗</a>
         </article>
     </section>
 
